@@ -66,6 +66,15 @@ app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 for router in (core_router, risk_router, telemetry_router, satellite_router, alerts_router, chat_router, ws_router): app.include_router(router, prefix='/api/v1' if router is not ws_router else '')
 
+@app.get('/health')
+def root_health(request: Request):
+    """Compatibility health check for local tools and browser monitors."""
+    return {
+        'status': 'ok',
+        'version': '1.0',
+        'events': len(request.app.state.store.events),
+    }
+
 @app.middleware("http")
 async def correlation_middleware(request: Request, call_next):
     correlation_id = request.headers.get("x-correlation-id", str(uuid4()))

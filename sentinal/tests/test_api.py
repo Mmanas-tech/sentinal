@@ -14,6 +14,7 @@ def client(tmp_path, monkeypatch):
         yield test_client
 
 def test_health_and_ingest(client):
+    assert client.get('/health').json()['status'] == 'ok'
     assert client.get('/api/v1/health').json()['status'] == 'ok'
     out = client.post('/api/v1/ingest', json={'events': [{
         'id': 'api-ingest-x',

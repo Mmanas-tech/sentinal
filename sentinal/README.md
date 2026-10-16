@@ -25,7 +25,7 @@ make test
 make dev
 ```
 
-`make test` runs `python -m pytest -q sentinal/tests`. `make dev` installs/builds the frontend and runs `python -m uvicorn api.main:app --reload --app-dir sentinal`, serving the dashboard at <http://127.0.0.1:8000/>.
+`make test` runs `python -m pytest -q sentinal/tests`. `make dev` installs/builds the frontend and runs Uvicorn with reload restricted to `sentinal`, serving the dashboard at <http://127.0.0.1:8000/>.
 
 ## Configuration
 

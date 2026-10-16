@@ -128,7 +128,7 @@ Start the API and built dashboard in one command:
 make dev
 ```
 
-Open <http://127.0.0.1:8000/>. The root target installs `sentinal/web` dependencies, builds the dashboard, and runs Uvicorn with `--reload` and `--app-dir sentinal`.
+Open <http://127.0.0.1:8000/>. The root target installs `sentinal/web` dependencies, builds the dashboard, and runs Uvicorn with `--reload`, `--reload-dir sentinal`, and `--app-dir sentinal`. Restricting the reload directory prevents changes inside `.venv` dependencies from restarting the server.
 
 ### Windows PowerShell
 
@@ -146,7 +146,7 @@ Run the demo and dashboard build/API with the exact equivalents:
 .\.venv\Scripts\python.exe -m sentinal.demo
 npm --prefix sentinal/web install --no-audit --no-fund
 npm --prefix sentinal/web run build
-.\.venv\Scripts\python.exe -m uvicorn api.main:app --reload --app-dir sentinal
+.\.venv\Scripts\python.exe -m uvicorn api.main:app --reload --reload-dir sentinal --app-dir sentinal
 ```
 
 If GNU Make is installed on Windows, `make dev` and `make test` are also available. PowerShell does not provide `make` by default.
@@ -181,7 +181,8 @@ The versioned REST base is `/api/v1`. The unversioned dashboard payload is `/api
 | Method | Path | Behavior |
 |---|---|---|
 | GET | `/api/mission` | Small dashboard payload; UI has an offline fallback. |
-| GET | `/api/v1/health` | Health, version, and buffered-event count. |
+| GET | `/health` | Compatibility health check for local tools. |
+| GET | `/api/v1/health` | Health, version, diagnostics, and buffered-event count. |
 | GET | `/api/v1/ready` | Readiness and persistence status. |
 | GET | `/api/v1/metrics` | Local runtime counters for ingestion, duplicates, validation errors, and alerts. |
 | POST | `/api/v1/ingest` | Append one event, an `events` list, or a body list; max 500 items. |
