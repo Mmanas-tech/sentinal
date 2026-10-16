@@ -8,7 +8,7 @@
 
 ## 1. Executive summary
 
-SENTINAL is an offline-first Python/FastAPI prototype that turns synthetic space/defence telemetry and related environmental, satellite, and cyber observations into validated signals, explainable asset risk, alerts, and reports. It demonstrates a deterministic walkthrough across four scenarios and seven intentionally planted telemetry faults. The implementation is local, configuration-driven, and deliberately safe to demonstrate: it has an in-process event bus, in-memory runtime state, no database, and no live external feeds.
+SENTINAL is an offline-first Python/FastAPI prototype that turns synthetic space/defence telemetry and related environmental, satellite, and cyber observations into validated signals, explainable asset risk, alerts, and reports. It demonstrates a deterministic walkthrough across four scenarios and seven intentionally planted telemetry faults. The implementation is local, configuration-driven, and deliberately safe to demonstrate: it has an in-process event bus, a bounded in-memory view backed by local SQLite, and no live external feeds.
 
 This document distinguishes verified workspace behavior from the original aspirational roadmap. **Implemented** means supported by code and tests; **Partial** means a scaffold, placeholder, or optional path; **Future** means proposed work only.
 
@@ -47,7 +47,7 @@ Operators need to triage heterogeneous observations without losing provenance or
 
 Verified code and tests cover: Python package setup; Pydantic schemas; YAML loading and weight validation; deterministic `SyntheticGenerator`; `flood`, `wildfire`, `satellite_fault`, and `cyber_attack`; seven named faults; telemetry and command validation; rolling z-score and optional Isolation Forest interfaces; health tracking; satellite change masks/indices/hotspots; cyber and environment analyzers; weighted risk with asset importance, correlation, dependency cascade, confidence, data gaps, trend, hysteresis, and what-if; explanation/playbooks; alert grouping/workflow/replay/audit helpers; FastAPI routes and WebSocket; React/Vite dashboard assets; CSV, GeoJSON, and ReportLab PDF exports; chat intent routing; and the offline demo.
 
-Runtime state is in memory (`api.main.State` uses a bounded event deque and alert list). Satellite query/change HTTP routes explicitly return placeholder/accepted responses. `/api/mission` contains fixed sample alert text plus buffered-event status. Telegram is an injected optional notifier and is a no-op unless configured. There is no verified live feed, map-tile integration, database, authentication/RBAC, durable audit store, or complete production hardening.
+Runtime state uses a bounded in-memory view backed by a local SQLite store for events, alerts, audit entries, and configuration snapshots. Satellite query/change routes support synthetic numeric analysis; real imagery/feed integration remains future. `/api/mission` exposes current buffered state and diagnostics. Optional bearer authentication/roles, correlation IDs, readiness, metrics, and bounded WebSocket validation are available. There is no verified live feed, map-tile integration, HA deployment, production identity provider, or complete compliance hardening.
 
 ## 6. User journeys
 
@@ -75,7 +75,7 @@ Request ranked assets or `/risk/whatif`; compare factor contributions, correlati
 | FR-006 | Validate fields, types, ranges, units, sequence, lateness, staleness, jumps, and statistical findings. | Implemented |
 | FR-007 | Validate commands against configured IDs, senders, and parameters. | Implemented |
 | FR-008 | Enforce a fixed module result with at least one reason. | Implemented |
-| FR-009 | Analyze telemetry, environment, cyber, and satellite-derived inputs. | Partial: satellite HTTP routes are placeholders |
+| FR-009 | Analyze telemetry, environment, cyber, and satellite-derived inputs. | Implemented for synthetic/local inputs; real imagery/feed integration is future |
 | FR-010 | Compute configurable, explainable asset risk. | Implemented |
 | FR-011 | Treat missing/unknown factors as gaps and redistribute active weights. | Implemented |
 | FR-012 | Apply correlation, dependency cascade, importance, and hysteresis. | Implemented |
@@ -83,15 +83,15 @@ Request ranked assets or `/risk/whatif`; compare factor contributions, correlati
 | FR-014 | Build plain/technical explanation cards with evidence, confidence, and playbooks. | Implemented |
 | FR-015 | Group/rate-limit and transition alerts; retain false-positive feedback. | Implemented in memory |
 | FR-016 | Expose versioned API, consistent errors, bounded WebSocket backfill, and health. | Implemented; hardening partial |
-| FR-017 | Serve a local dashboard and mission summary. | Partial: shell plus fixed/fallback summary |
+| FR-017 | Serve a local dashboard and mission summary. | Implemented local summary and connected scenario/chat workflows; map and some operator controls remain partial |
 | FR-018 | Export CSV, GeoJSON, PDF; replay timelines and what-if adapters. | Implemented offline |
 | FR-019 | Route bounded chat intents without an LLM dependency. | Implemented rule-based |
-| FR-020 | Ingest real feeds, process real imagery, provide live tiles, durable storage, and external notifications. | Future/partial hooks |
-| FR-021 | Add production auth/RBAC, tenant isolation, encryption/key management, HA, and compliance. | Future |
+| FR-020 | Ingest real feeds, process real imagery, provide live tiles, durable storage, and external notifications. | Partial: local durable storage exists; real feeds/imagery/tiles/external delivery are future |
+| FR-021 | Add production auth/RBAC, tenant isolation, encryption/key management, HA, and compliance. | Partial foundation: opt-in local auth/roles and correlation/diagnostics exist; enterprise identity, isolation, encryption, HA, and compliance are future |
 
 ## 8. Architecture and module boundaries
 
-Intended flow: `sources -> ingestion/normalizer -> contracts -> event bus -> detectors -> risk -> explainability -> alerts/API/dashboard/reports`. Current execution is local and directly composed rather than distributed.
+Intended flow: `sources -> ingestion/normalizer -> contracts -> event bus -> detectors -> risk -> explainability -> alerts/API/dashboard/reports`. Current execution is local and directly connected through typed API boundaries, a durable local runtime store, and an in-process event bus; external source adapters remain future.osed rather than distributed.
 
 - `core`: Pydantic schemas, contracts, YAML loader, event bus.
 - `ingestion`: synthetic generator and scenario profiles; future adapters belong here.
@@ -101,7 +101,7 @@ Intended flow: `sources -> ingestion/normalizer -> contracts -> event bus -> det
 - `risk`: factor normalization, weighted engine, correlation, cascade, hysteresis.
 - `explain`: cards, confidence, templates, playbooks.
 - `alerts`: workflow, grouping, notifier, audit/replay helpers.
-- `api`: FastAPI routes, in-memory state, errors, WebSocket.
+- `api`: FastAPI routes, durable local runtime state, errors, WebSocket.
 - `reports`: offline serializers/exporters.
 - `chat`: deterministic intent router.
 - `web`: Vite/React dashboard build.
@@ -173,7 +173,7 @@ The validator must report all findings, highest level (`OK`, `WARN`, `ERROR`, `C
 
 ### 11.3 Satellite
 
-Implemented numeric utilities calculate difference masks, spectral indices, land-cover classification, and ranked hotspots from supplied arrays. The product requirement is to accept before/after imagery, threshold, cloud cover, and AOI and return change evidence with QA metadata. Current API query/change routes return placeholder/accepted responses; no real imagery, STAC, raster tile, cloud masking service, or live tiles exists. Real imagery ingestion and operational QA are future.
+Implemented numeric utilities and local API routes calculate difference masks, spectral indices, land-cover classification, and ranked hotspots from supplied numeric arrays. The product requirement is met for synthetic/local inputs with threshold, cloud cover, AOI, and QA metadata; no real imagery, STAC, raster tile, cloud masking service, or live tiles exists. Real imagery ingestion and operational QA are future.
 
 ### 11.4 Environment
 
@@ -201,7 +201,7 @@ Implemented route families include `/api/v1/health`, ingest, named scenarios, up
 
 ### 11.10 Dashboard
 
-The local React/Vite build is served when `web/dist` exists. It is intended to present mission summary, risk, alerts, telemetry, evidence, explanations, and controls. Current mission payload contains fixed sample alert text and buffered-event status; it is not a live operational map. Live map tiles, full interaction coverage, and accessibility audit remain work.
+The local React/Vite build is served when `web/dist` exists. It presents current mission summary, risk, alerts, telemetry, scenario launch, and evidence-only chat. It is not a live operational map; live map tiles, full interaction coverage, and accessibility audit remain work.
 
 ### 11.11 Reports and exports
 
@@ -214,13 +214,13 @@ CSV and GeoJSON use standard-library serializers; PDF uses ReportLab; timeline r
 - Invalid input must fail at a boundary without crashing unrelated processing.
 - Module failures should be isolated and surfaced as data gaps in a future orchestrator.
 - Health must report service status and buffered counts.
-- Current limitation: process restart loses state; no queue, retry, persistence, HA, or backpressure system exists.
+- Current limitation: local SQLite persistence exists, but no queue, retry, HA, or backpressure system exists.
 
 ### Security requirements
 - Validate all API inputs and file sizes/types; never execute uploaded content.
 - Keep secrets out of source and use environment/vault integration when transports are enabled.
 - Preserve source references and audit changes where available.
-- Current limitation: no authentication, authorization/RBAC, tenant isolation, TLS configuration, encryption-at-rest, dependency policy, or complete threat model is implemented. Synthetic demo data must not be treated as classified/operational data.
+- Current limitation: opt-in local bearer auth/roles exist, but there is no enterprise identity, tenant isolation, TLS deployment, encryption/key management, dependency policy, or complete threat model. Synthetic demo data must not be treated as classified/operational data.
 
 ### Accessibility and usability
 - Plain-language explanation by default; technical detail on demand.
@@ -231,7 +231,7 @@ CSV and GeoJSON use standard-library serializers; PDF uses ReportLab; timeline r
 ### Observability
 - Preserve correlation/event IDs in logs and evidence.
 - Measure ingest rate, queue/buffer depth, module latency, alert counts, validation findings, and false-positive feedback.
-- Current workspace provides health and in-memory counts but no structured logging pipeline, metrics backend, tracing, or ops page.
+- Current workspace provides health/readiness, correlation IDs, and local counters but no structured logging pipeline, metrics backend, tracing, or ops page.
 
 ## 13. Edge cases
 
@@ -269,8 +269,8 @@ For the current demo: complete all four scenarios in under three minutes on a de
 
 - No SQLite, PostgreSQL, PostGIS, TimescaleDB, or other persistence exists.
 - No real feeds, external satellite catalog, live weather/cyber source, or live map tiles exists.
-- Satellite API operations are placeholders despite local numeric utilities.
-- Dashboard mission alerts include fixed sample content; end-to-end live visualization is incomplete.
+- Real satellite feeds, imagery QA, and live map tiles are not implemented.
+- Dashboard map, reports navigation, and some operator controls remain incomplete.
 - API state, alert history, hysteresis, and audit behavior are process-local.
 - No production authentication, RBAC, tenant boundaries, TLS deployment, secrets vault, encryption, or compliance evidence.
 - Telegram is optional/no-op without injected configuration; no guaranteed delivery.

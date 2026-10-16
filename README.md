@@ -39,6 +39,8 @@ The current prototype includes:
 - Cyber and environment analyzers, weighted risk, thresholds, correlation, dependency/cascade handling, hysteresis, data-gap reporting, and non-destructive what-if evaluation.
 - Explanation cards with what/why/confidence/factors/evidence/next steps, alert state transitions, grouping, audit/replay helpers, CSV/GeoJSON/PDF exporters, and FastAPI routes.
 - A React/Vite dashboard with a synthetic-feed presentation and API/fallback mission payload.
+- A local SQLite runtime store for events, alerts, audit entries, and configuration snapshots; set `SENTINAL_DB_PATH` to choose another database file.
+- Optional bearer authentication and role checks for mutating operations. Set `SENTINAL_AUTH_REQUIRED=true` and `SENTINAL_API_TOKEN=...` to enable it; local development remains open by default.
 
 Optional or future-facing pieces include real satellite/file ingestion, GeoTIFF support (`rasterio` is commented out), external data adapters, durable storage, authentication/authorization, queues, production observability, richer map layers, and real ML/LLM integrations. The local satellite change/query and JSON upload paths are implemented for synthetic data; the dashboard's map, reports navigation, assistant send action, and several asset controls remain visual/UI placeholders.
 
@@ -180,6 +182,8 @@ The versioned REST base is `/api/v1`. The unversioned dashboard payload is `/api
 |---|---|---|
 | GET | `/api/mission` | Small dashboard payload; UI has an offline fallback. |
 | GET | `/api/v1/health` | Health, version, and buffered-event count. |
+| GET | `/api/v1/ready` | Readiness and persistence status. |
+| GET | `/api/v1/metrics` | Local runtime counters for ingestion, duplicates, validation errors, and alerts. |
 | POST | `/api/v1/ingest` | Append one event, an `events` list, or a body list; max 500 items. |
 | POST | `/api/v1/ingest/{event_type}` | Same ingest behavior with type defaulted to telemetry, satellite, cyber, or environment. |
 | POST | `/api/v1/scenarios/run` | Generate and store a named synthetic scenario; accepts `scenario`, `count`, `seed`, `plant_anomalies`. |
@@ -200,6 +204,7 @@ The versioned REST base is `/api/v1`. The unversioned dashboard payload is `/api
 | GET | `/api/v1/alerts/{alert_id}/why-not/{zone}` | Zone-specific generic why-not response. |
 | PATCH | `/api/v1/alerts/{alert_id}` | Update stored status, assignee, or feedback. |
 | GET | `/api/v1/export/geojson` | Export buffered events as GeoJSON. |
+| GET | `/api/v1/export/csv` | Export buffered events as CSV. |
 | GET | `/api/v1/reports/{incident_id}` | Generate a PDF report from matching stored alert records. |
 
 FastAPI also exposes its normal documentation at `/docs` and `/openapi.json` while the server is running.
@@ -283,6 +288,7 @@ The generator also accepts `count`, `seed`, `noise`, and `drift`; invalid scenar
 - **Cyber/environment:** rule-based analyzers score synthetic payloads and return reasons/evidence; environment supports flood/wildfire-style fields and a failure-safe comparison hook.
 - **Reports/replay:** Python helpers export CSV, GeoJSON, PDF, audit JSONL, and sorted/paged replay; the API currently exposes GeoJSON and incident PDF routes.
 - **Frontend:** the React screen renders a static synthetic mission overview, filters its three sample alerts, adjusts local display sliders, and fetches `/api/mission`. Several controls are presentation-only and do not call the versioned API.
+- **Runtime foundation:** events and alerts survive process restart through SQLite; `/ready`, `/metrics`, correlation IDs, optional bearer auth, and bounded WebSocket validation provide local operational hardening. This is not HA or a production identity system.
 
 ## Troubleshooting
 
@@ -296,7 +302,7 @@ The generator also accepts `count`, `seed`, `noise`, and `drift`; invalid scenar
 
 ## Deployment and limitations
 
-This is a local prototype. For any real deployment, add durable storage, authentication and authorization, TLS, request limits, structured logging/metrics, queue/back-pressure, multi-worker-safe state, secrets management, retention controls, and an independent safety review. Do not expose the development server or `--reload` configuration to an untrusted network. The current API accepts unvalidated ingest dictionaries, does not persist raw inputs, has no user/account model, and does not provide real-time WebSocket broadcasts. Real satellite feeds and parts of the UI remain future work.
+This is a local prototype with a bounded production foundation. For any real deployment, add TLS, a production identity provider, tenant isolation, queue/back-pressure, multi-worker-safe state, secrets management/vault integration, retention controls, HA, and an independent safety review. Do not expose the development server or `--reload` configuration to an untrusted network. Real satellite feeds, live imagery/maps, and several parts of the UI remain future work.
 
 ## Contributing
 
