@@ -136,3 +136,20 @@ def test_mutating_routes_support_opt_in_authentication(client, monkeypatch):
         headers={'Authorization': 'Bearer test-token', 'X-SENTINAL-ROLE': 'admin'},
     )
     assert allowed.status_code == 200
+
+
+def test_alert_workflow_requires_valid_transition(client):
+    scenario = client.post('/api/v1/scenarios/flood/run', json={'count': 1, 'seed': 21})
+    assert scenario.status_code == 200
+    alert = client.get('/api/v1/alerts').json()['items'][-1]
+    acknowledged = client.patch(
+        f"/api/v1/alerts/{alert['id']}",
+        json={'status': 'Acknowledged'},
+    )
+    assert acknowledged.status_code == 200
+    invalid = client.patch(
+        f"/api/v1/alerts/{alert['id']}",
+        json={'status': 'New'},
+    )
+    assert invalid.status_code == 400
+    assert invalid.json()['error']['code'] == 'INVALID_ALERT_TRANSITION'

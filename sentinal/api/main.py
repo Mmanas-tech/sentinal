@@ -100,7 +100,7 @@ def mission(request: Request):
     return {
         'risk': risk,
         'alerts': dashboard_alerts,
-        'telemetry': [f'events buffered: {len(store.events)}', f'alerts tracked: {len(store.alerts)}'],
+        'telemetry': [f'events buffered: {len(store.events)}', f'alerts tracked: {len(store.alerts)}', f'validation errors: {store.metrics["validation_errors"]}'],
         'diagnostics': dict(store.metrics),
     }
 

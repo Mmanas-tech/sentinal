@@ -288,7 +288,7 @@ The generator also accepts `count`, `seed`, `noise`, and `drift`; invalid scenar
 - **Chat:** keyword-first intents are `what_changed`, `worst_area`, `how_much`, `compare_dates`, and `why_flagged`; unsupported or unavailable questions return safe evidence-only responses. It does not call an LLM.
 - **Cyber/environment:** rule-based analyzers score synthetic payloads and return reasons/evidence; environment supports flood/wildfire-style fields and a failure-safe comparison hook.
 - **Reports/replay:** Python helpers export CSV, GeoJSON, PDF, audit JSONL, and sorted/paged replay; the API currently exposes GeoJSON and incident PDF routes.
-- **Frontend:** the React screen renders a static synthetic mission overview, filters its three sample alerts, adjusts local display sliders, and fetches `/api/mission`. Several controls are presentation-only and do not call the versioned API.
+- **Frontend:** the React screen renders the current synthetic mission overview, filters alerts, launches scenarios, inspects explanation snapshots, acknowledges alerts, records false positives, links PDF reports, and uses the evidence-only chat API. The map and some navigation remain presentation-only.
 - **Runtime foundation:** events and alerts survive process restart through SQLite; `/ready`, `/metrics`, correlation IDs, optional bearer auth, and bounded WebSocket validation provide local operational hardening. This is not HA or a production identity system.
 
 ## Troubleshooting

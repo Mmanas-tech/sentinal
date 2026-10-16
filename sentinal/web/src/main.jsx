@@ -57,6 +57,21 @@ function App() {
     setSelectedAlert(await response.json());
   }
 
+  async function updateAlert(alert, status) {
+    if (!alert[3]) return;
+    const response = await fetch(`/api/v1/alerts/${alert[3]}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      setAnswer({ answer: body?.error?.message || "Alert update failed" });
+      return;
+    }
+    await refresh();
+  }
+
   if (!data) return <main className="loading">Connecting to SENTINAL…<small>Offline cache ready</small></main>;
   const alerts = data.alerts.filter((alert) => filter === "ALL" || alert[0] === filter);
 
@@ -72,7 +87,10 @@ function App() {
         <div className="grid top">
           <Panel title="THREAT MAP" action="Expand"><div className="map"><i className="orbit" /><span className="maplabel">SYNTHETIC MAP DATA<br /><small>Leaflet-ready projection</small></span></div></Panel>
           <Panel title="MISSION RISK"><div className="risk"><div className="gauge"><strong>{data.risk}</strong><small>/ 100</small></div><div><b className="red">{data.risk >= 80 ? "CRITICAL" : data.risk >= 60 ? "ELEVATED" : "LOW"}</b><p className="muted">Latest stored scenario</p></div></div><div className="bar"><i style={{ width: `${data.risk}%` }} /></div><div className="legend"><span>LOW 0</span><span>CRITICAL 100</span></div></Panel>
-          <Panel title="ALERT FEED" action={<span className="filters">{["ALL", "CRITICAL", "HIGH", "WATCH"].map((value) => <button className={filter === value ? "sel" : ""} onClick={() => setFilter(value)} key={value}>{value}</button>)}</span>}><div className="alerts">{alerts.map((alert, index) => <article key={`${alert[1]}-${index}`}><b className={`tag ${alert[0].toLowerCase()}`}>{alert[0]}</b><span><strong>{alert[1]}</strong><small>{alert[2]}</small></span><button className="outline" onClick={() => inspectAlert(alert)}>Inspect</button></article>)}</div>{selectedAlert && <div className="explain"><strong>{selectedAlert.what || "Alert explanation"}</strong><p>{(selectedAlert.why || []).join("; ")}</p><a href={`/api/v1/reports/${selectedAlert.alert_id || "latest"}`} target="_blank" rel="noreferrer">Open PDF report</a></div>}</Panel>
+          <Panel title="ALERT FEED" action={<span className="filters">{["ALL", "CRITICAL", "HIGH", "WATCH"].map((value) => <button className={filter === value ? "sel" : ""} onClick={() => setFilter(value)} key={value}>{value}</button>)}</span>}>
+            <div className="alerts">{alerts.length ? alerts.map((alert, index) => <article key={`${alert[1]}-${index}`}><b className={`tag ${alert[0].toLowerCase()}`}>{alert[0]}</b><span><strong>{alert[1]}</strong><small>{alert[2]}</small></span><button className="outline" onClick={() => inspectAlert(alert)}>Inspect</button>{alert[2] === "New" && <button className="outline" onClick={() => updateAlert(alert, "Acknowledged")}>Acknowledge</button>}<button className="outline" onClick={() => updateAlert(alert, "False Positive")}>False positive</button></article>) : <p className="muted">No alerts match this filter.</p>}</div>
+            {selectedAlert && <div className="explain"><strong>{selectedAlert.what || "Alert explanation"}</strong><p>{(selectedAlert.why || []).join("; ")}</p><a href={`/api/v1/reports/${selectedAlert.alert_id || "latest"}`} target="_blank" rel="noreferrer">Open PDF report</a></div>}
+          </Panel>
         </div>
         <div className="grid bottom">
           <Panel title="WHY THIS SCORE"><p className="explain">Run a synthetic scenario to create a risk explanation and alert. All results remain local and deterministic.</p><div className="chips"><span>EXPLAINABLE</span><span>SYNTHETIC</span><span>OFFLINE</span></div></Panel>
