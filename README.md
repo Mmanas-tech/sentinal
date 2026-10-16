@@ -41,6 +41,7 @@ The current prototype includes:
 - A React/Vite dashboard with a synthetic-feed presentation and API/fallback mission payload.
 - A local SQLite runtime store for events, alerts, audit entries, and configuration snapshots; set `SENTINAL_DB_PATH` to choose another database file.
 - Optional bearer authentication and role checks for mutating operations. Set `SENTINAL_AUTH_REQUIRED=true` and `SENTINAL_API_TOKEN=...` to enable it; local development remains open by default.
+- An opt-in real telemetry adapter at `POST /api/v1/ml/telemetry/analyze`. It can score NASA SMAP/MSL-shaped numeric telemetry with the Hugging Face `keras-io/timeseries-anomaly-detection` Keras autoencoder. Install the separate `sentinal/requirements-ml.txt` only when using this adapter; the deterministic validators and risk engine remain the default fallback.
 
 Optional or future-facing pieces include real satellite/file ingestion, GeoTIFF support (`rasterio` is commented out), external data adapters, durable storage, authentication/authorization, queues, production observability, richer map layers, and real ML/LLM integrations. The local satellite change/query and JSON upload paths are implemented for synthetic data; the dashboard's map, reports navigation, assistant send action, and several asset controls remain visual/UI placeholders.
 
@@ -101,6 +102,11 @@ The API creates one in-memory `State` containing the risk engine, telemetry vali
 - Node.js and npm for the dashboard build; the checked-in `package-lock.json` is used by npm.
 - GNU Make for the one-command targets on Linux/macOS. Windows users can run the equivalent PowerShell commands below.
 - No credentials, database, external API, or network service is required for the demo. `reportlab` is required for PDF reports and is pinned in `sentinal/requirements.txt`.
+- Real telemetry ML is optional and requires TensorFlow, Hugging Face Hub, and Kaggle tooling:
+  ```powershell
+  .\.venv\Scripts\python.exe -m pip install -r .\sentinal\requirements-ml.txt
+  ```
+  Configure Kaggle credentials using Kaggle's supported local configuration, never in source control. Keep downloaded datasets outside Git and set `SENTINAL_HF_TELEMETRY_MODEL` only when selecting a different compatible Keras model.
 
 ## Install and run
 
@@ -174,6 +180,37 @@ npm --prefix sentinal/web run build
 
 The build writes the Vite output to `sentinal/web/dist`; FastAPI serves that directory when it exists. The frontend has a fallback payload if `/api/mission` is unavailable.
 
+## Real telemetry ML (optional)
+
+The first real-data path is deliberately narrow:
+
+1. **Dataset:** NASA SMAP/MSL spacecraft telemetry anomaly benchmark. A Kaggle export may be used as a convenient mirror, but the NASA benchmark remains the provenance reference. The adapter accepts a numeric CSV or NPY matrix and does not commit downloaded data.
+2. **Model:** Hugging Face `keras-io/timeseries-anomaly-detection`, a Keras autoencoder baseline. It is not claimed to be NASA-specific; SENTINAL returns its reconstruction errors and model name as evidence.
+3. **Decision logic:** deterministic validation and the existing risk engine remain active. ML scores are not silently substituted for a risk factor.
+4. **Credentials:** Kaggle credentials are read only from Kaggle's local configuration when you use its CLI/API. Never put `kaggle.json`, API keys, downloaded data, or model caches in Git.
+
+Install the optional dependencies:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r .\sentinal\requirements-ml.txt
+```
+
+Then analyze a local export:
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/api/v1/ml/telemetry/analyze `
+  -H "Content-Type: application/json" `
+  -d "{\"file_path\":\"C:\\data\\smap\\channel_1.csv\",\"window\":24}"
+```
+
+Or send a small matrix directly:
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/api/v1/ml/telemetry/analyze `
+  -H "Content-Type: application/json" `
+  -d "{\"samples\":[[0.1,0.2],[0.2,0.2],[0.1,0.3]],\"window\":2}"
+```
+
 ## API
 
 The versioned REST base is `/api/v1`. The unversioned dashboard payload is `/api/mission`; the WebSocket is `/ws/stream`.
@@ -198,6 +235,7 @@ The versioned REST base is `/api/v1`. The unversioned dashboard payload is `/api
 | POST | `/api/v1/satellite/change` | Analyze 2D numeric `before`/`after` arrays with threshold, cloud-cover, AOI, hotspots, and an optional evidence-only chat question. |
 | GET/POST | `/api/v1/satellite/query` | Query buffered synthetic satellite events with pagination and optional `source_id`/`scenario` filters. |
 | POST | `/api/v1/chat` | Route a bounded evidence-only question through the local keyword intent router. |
+| POST | `/api/v1/ml/telemetry/analyze` | Optional Hugging Face autoencoder scoring for a real numeric telemetry matrix; requires `requirements-ml.txt`. |
 | GET | `/api/v1/alerts` | Paginated stored alerts. |
 | GET | `/api/v1/alerts/explanation/{alert_id}` | Return the stored explanation snapshot for an alert. |
 | GET | `/api/v1/alerts/{alert_id}/explanation` | Stored explanation snapshot, or unavailable/data-gap response. |

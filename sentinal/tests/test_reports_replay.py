@@ -24,6 +24,7 @@ def test_csv_geojson_and_pdf_exports(tmp_path) -> None:
         assert "reportlab" in str(exc)
     else:
         assert pdf.startswith(b"%PDF")
+        assert b"SENTINAL Risk Report" in pdf
 
 
 def test_audit_is_append_only_and_safe(tmp_path) -> None:

@@ -1,0 +1,5 @@
+# Optional real-data telemetry scoring.
+# The base application remains runnable without these large dependencies.
+tensorflow==2.18.0
+huggingface_hub==0.27.1
+kaggle==1.6.17

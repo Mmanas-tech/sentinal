@@ -16,6 +16,7 @@ from .routes_telemetry import router as telemetry_router
 from .routes_satellite import router as satellite_router
 from .routes_alerts import router as alerts_router
 from .routes_chat import router as chat_router
+from .routes_ml import router as ml_router
 from .websocket import router as ws_router
 
 class State:
@@ -64,7 +65,7 @@ app = FastAPI(title='SENTINAL API', version='1.0', lifespan=lifespan)
 app.state.store = State()
 app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
-for router in (core_router, risk_router, telemetry_router, satellite_router, alerts_router, chat_router, ws_router): app.include_router(router, prefix='/api/v1' if router is not ws_router else '')
+for router in (core_router, risk_router, telemetry_router, satellite_router, alerts_router, chat_router, ml_router, ws_router): app.include_router(router, prefix='/api/v1' if router is not ws_router else '')
 
 @app.get('/health')
 def root_health(request: Request):
