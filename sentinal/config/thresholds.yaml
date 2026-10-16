@@ -1,0 +1,17 @@
+version: "1.0"
+risk_levels:
+  low: {min: 0, max: 29}
+  medium: {min: 30, max: 59}
+  high: {min: 60, max: 79}
+  critical: {min: 80, max: 100}
+hysteresis: {raise_high_at: 60, clear_high_below: 55, raise_critical_at: 80, clear_critical_below: 75}
+telemetry: {warn_fraction_of_limit: 0.80, stale_after_s: 60, max_packet_latency_s: 10, max_gap: 1, incident_burst_window_s: 60, rolling_z_score_warn: 3.0, rolling_window: 20, isolation_forest_enabled: false}
+satellite: {change_fraction_warn: 0.15, change_fraction_high: 0.30, cloud_cover_warn: 0.40}
+environment:
+  rainfall_24h_mm: {warn: 60, high: 80, critical: 150}
+  flood_level_m: {warn: 1.0, high: 1.5, critical: 2.5}
+  wind_speed_mps: {warn: 17, high: 25, critical: 33}
+  smoke_index: {warn: 0.50, high: 0.75, critical: 0.90}
+cyber:
+  failed_logins_10m: {warn: 5, high: 20, critical: 50}
+  distinct_source_ips_10m: {warn: 3, high: 10, critical: 25}

@@ -1,0 +1,56 @@
+version: "1.0"
+event:
+  required: [id, source_id, type, timestamp, received_at, payload, schema_version, raw_ref]
+  fields:
+    id: {type: string, pattern: "^evt_[A-Za-z0-9_-]+$"}
+    source_id: {type: string, min_length: 1}
+    type: {type: enum, values: [telemetry, satellite, cyber, environment]}
+    timestamp: {type: datetime, timezone: UTC}
+    received_at: {type: datetime, timezone: UTC}
+    schema_version: {type: string}
+    raw_ref: {type: string, min_length: 1}
+  geo:
+    type: object
+    fields:
+      lat: {type: float, min: -90, max: 90, unit: degrees}
+      lon: {type: float, min: -180, max: 180, unit: degrees}
+telemetry_packet:
+  required: [seq, timestamp, session_id, battery_v, temp_c, solar_current_a, lat, lon]
+  fields:
+    seq: {type: integer, min: 0, max: 65535, rollover: 65535}
+    timestamp: {type: datetime, timezone: UTC}
+    session_id: {type: string, min_length: 1}
+    boot: {type: boolean, required: false}
+    battery_v: {type: float, min: 0, max: 50, unit: V, max_jump: 5}
+    temp_c: {type: float, min: -80, max: 120, unit: C, max_jump: 30}
+    solar_current_a: {type: float, min: 0, max: 30, unit: A, max_jump: 10}
+    lat: {type: float, min: -90, max: 90, unit: degrees}
+    lon: {type: float, min: -180, max: 180, unit: degrees}
+    faults: {type: array, required: false}
+  unknown_fields: warn
+  units:
+    battery_v: V
+    temp_c: C
+    solar_current_a: A
+    lat: degrees
+    lon: degrees
+  null_is_missing: true
+  stale_after_s: 60
+  late_after_s: 30
+  clock_drift_tolerance_s: 10
+  sequence:
+    detect_duplicates: true
+    detect_gaps: true
+    allow_reset_on: [session_id, boot]
+commands:
+  allowed_senders: [mission_controller, operator_console, test_harness]
+  definitions:
+    SET_MODE:
+      parameters:
+        mode: {type: enum, values: [safe, nominal, science]}
+    SET_TARGET:
+      parameters:
+        latitude: {type: number, min: -90, max: 90}
+        longitude: {type: number, min: -180, max: 180}
+    PING:
+      parameters: {}

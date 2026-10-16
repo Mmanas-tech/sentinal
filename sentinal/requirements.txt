@@ -1,0 +1,14 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.5
+SQLAlchemy==2.0.37
+PyYAML==6.0.2
+numpy==2.2.2
+opencv-python-headless==4.11.0.86
+scikit-learn==1.6.1
+reportlab==4.2.5
+pytest==8.3.4
+httpx==0.28.1
+python-multipart==0.0.20
+# Optional GeoTIFF support; install separately when raster processing is enabled.
+# rasterio

@@ -1,0 +1,11 @@
+version: "1.0"
+factors:
+  satellite: 0.30
+  telemetry: 0.25
+  cyber: 0.20
+  environment: 0.25
+validation: {require_sum: 1.0, tolerance: 0.000001}
+offline_factor_policy: redistribute_proportionally
+single_source_confidence_cap: 0.70
+correlation_boost: {per_extra_source: 5, max: 15, agreement_tolerance: 10}
+cascade_boost: {dependency_fraction: 0.30}

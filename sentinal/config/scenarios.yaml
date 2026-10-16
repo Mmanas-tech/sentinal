@@ -1,0 +1,37 @@
+version: "1.0"
+defaults:
+  count: 24
+  interval_seconds: 60
+  start_time: "2026-01-01T00:00:00Z"
+  noise: 0.02
+  drift: 0.01
+  location: {lat: 35.0, lon: -100.0}
+  faults:
+    missing_field: {field: temp_c}
+    out_of_range: {field: battery_v, value: 999.0}
+    wrong_type: {field: temp_c, value: invalid-number}
+    duplicate_sequence: {offset: -1}
+    gap_out_of_order: {seq_jump: 2, timestamp_offset_seconds: -40}
+    stale_data: {age_seconds: 180}
+    sudden_jump: {field: temp_c, delta: 40.0}
+scenarios:
+  flood:
+    location: {lat: 29.76, lon: -95.37}
+    source_id: river-gauge-01
+    telemetry: {battery_v: 12.4, temp_c: 24.0, solar_current_a: 4.2}
+    environment: {water_level_m: 3.2, rainfall_mm: 18.0}
+  wildfire:
+    location: {lat: 39.74, lon: -105.0}
+    source_id: fire-weather-01
+    telemetry: {battery_v: 12.1, temp_c: 31.0, solar_current_a: 5.0}
+    environment: {temperature_c: 31.0, smoke_index: 0.12, wind_speed_mps: 5.0}
+  satellite_fault:
+    location: {lat: 0.0, lon: 0.0}
+    source_id: satellite-07
+    telemetry: {battery_v: 27.0, temp_c: 18.0, solar_current_a: 8.0}
+    satellite: {orbit: sun_synchronous, attitude_deg: 0.2, signal_db: -71.0}
+  cyber_attack:
+    location: {lat: 37.77, lon: -122.42}
+    source_id: gateway-01
+    telemetry: {battery_v: 12.6, temp_c: 22.0, solar_current_a: 3.0}
+    cyber: {protocol: tcp, source_ip: 192.0.2.10, failed_logins: 2, packets_per_second: 120}

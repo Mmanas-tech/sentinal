@@ -1,0 +1,7 @@
+version: "1.0"
+default_importance: 50
+assets:
+  - {id: asset_ground_01, name: North Ground Station, type: ground_station, lat: 51.0500, lon: 13.7400, importance: 90, depends_on: [asset_grid_01]}
+  - {id: asset_grid_01, name: Regional Substation, type: grid, lat: 51.0600, lon: 13.7600, importance: 85, depends_on: []}
+  - {id: asset_hospital_01, name: Central Hospital, type: hospital, lat: 51.0450, lon: 13.7200, importance: 95, depends_on: [asset_grid_01]}
+  - {id: asset_port_01, name: River Logistics Port, type: port, lat: 51.0300, lon: 13.7900, importance: 70, depends_on: [asset_grid_01]}

@@ -1,0 +1,19 @@
+version: '1.0'
+default:
+  low: [Continue monitoring, Record the signal for trend analysis]
+  medium: [Review evidence, Confirm the affected source is healthy, Assign an analyst]
+  high: [Verify with an independent source, Notify the duty controller, Check affected assets]
+  critical: [Escalate to the commander, Open an incident and assign an owner, Follow the emergency response procedure]
+  next_steps: [Verify the signal with an independent source, Review the linked evidence]
+flood:
+  high: [Verify with a field team, Check assets in the flood zone]
+  critical: [Escalate to commander, Start evacuation check, Notify utilities]
+wildfire:
+  high: [Verify smoke and hotspot evidence, Notify the field response team]
+  critical: [Escalate to commander, Start evacuation check, Notify emergency services]
+telemetry:
+  high: [Quarantine affected packets, Check the latest valid packet, Notify the mission controller]
+  critical: [Quarantine the source, Escalate to the mission controller, Use the safe-state procedure]
+cyber:
+  high: [Preserve logs, Block confirmed malicious sources, Notify the security lead]
+  critical: [Isolate the affected system, Escalate to the security lead, Begin incident response]
