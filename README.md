@@ -40,7 +40,7 @@ The current prototype includes:
 - Explanation cards with what/why/confidence/factors/evidence/next steps, alert state transitions, grouping, audit/replay helpers, CSV/GeoJSON/PDF exporters, and FastAPI routes.
 - A React/Vite dashboard with a synthetic-feed presentation and API/fallback mission payload.
 
-Optional or future-facing pieces include real satellite/file ingestion, GeoTIFF support (`rasterio` is commented out), external data adapters, durable storage, authentication/authorization, queues, production observability, richer map layers, and real ML/LLM integrations. The current satellite HTTP routes and upload route are explicitly placeholders; the dashboard's map, scenario launcher, reports navigation, assistant send action, and several asset controls are visual/UI placeholders rather than complete workflows.
+Optional or future-facing pieces include real satellite/file ingestion, GeoTIFF support (`rasterio` is commented out), external data adapters, durable storage, authentication/authorization, queues, production observability, richer map layers, and real ML/LLM integrations. The local satellite change/query and JSON upload paths are implemented for synthetic data; the dashboard's map, reports navigation, assistant send action, and several asset controls remain visual/UI placeholders.
 
 ## Architecture
 
@@ -184,16 +184,17 @@ The versioned REST base is `/api/v1`. The unversioned dashboard payload is `/api
 | POST | `/api/v1/ingest/{event_type}` | Same ingest behavior with type defaulted to telemetry, satellite, cyber, or environment. |
 | POST | `/api/v1/scenarios/run` | Generate and store a named synthetic scenario; accepts `scenario`, `count`, `seed`, `plant_anomalies`. |
 | POST | `/api/v1/scenarios/{name}/run` | Named form of scenario execution. |
-| POST | `/api/v1/upload` | Reads and size-checks an upload (5,000,000 bytes); returns `placeholder: true`, does not analyze it. |
+| POST | `/api/v1/upload` | Reads a size-limited upload; JSON objects or `events` lists are imported into the in-memory event buffer. Other file types are accepted for future adapters. |
 | GET/PUT | `/api/v1/config` | Read/update in-memory API config. |
 | GET/PUT | `/api/v1/config/{config_type}` | Read YAML bundle types or store a config payload; `weights` also updates the live risk engine. |
 | POST | `/api/v1/telemetry/validate` | Validate one telemetry payload and return findings. |
 | GET | `/api/v1/risk/assets` | Paginated in-memory risk asset registry. |
 | POST | `/api/v1/risk/whatif` | Non-persistent risk what-if evaluation. |
-| POST | `/api/v1/satellite/change` | Placeholder; accepts request and returns `placeholder: true`. |
-| GET/POST | `/api/v1/satellite/query` | Placeholder empty query (GET) or accepted request (POST). |
+| POST | `/api/v1/satellite/change` | Analyze 2D numeric `before`/`after` arrays with threshold, cloud-cover, AOI, hotspots, and an optional evidence-only chat question. |
+| GET/POST | `/api/v1/satellite/query` | Query buffered synthetic satellite events with pagination and optional `source_id`/`scenario` filters. |
+| POST | `/api/v1/chat` | Route a bounded evidence-only question through the local keyword intent router. |
 | GET | `/api/v1/alerts` | Paginated stored alerts. |
-| GET | `/api/v1/alerts/explanation/{alert_id}` | Placeholder explanation string. |
+| GET | `/api/v1/alerts/explanation/{alert_id}` | Return the stored explanation snapshot for an alert. |
 | GET | `/api/v1/alerts/{alert_id}/explanation` | Stored explanation snapshot, or unavailable/data-gap response. |
 | GET | `/api/v1/alerts/{alert_id}/why-not` | Generic why-not response. |
 | GET | `/api/v1/alerts/{alert_id}/why-not/{zone}` | Zone-specific generic why-not response. |
@@ -277,7 +278,7 @@ The generator also accepts `count`, `seed`, `noise`, and `drift`; invalid scenar
 - **Telemetry:** distinguishes missing, null, zero, unknown fields, bad types, units, ranges, stale/late packets, sequence errors, jumps, and quarantine. Validation returns `OK`, `WARN`, `ERROR`, or `CRITICAL` with all findings.
 - **Risk:** combines satellite, telemetry, cyber, and environment factors with configurable weights; levels are Low `<30`, Medium `30–<60`, High `60–<80`, Critical `≥80`. It reports confidence, data gaps, correlation/conflict, and dependency cascade effects. What-if evaluation does not save changes.
 - **Explainability and alerts:** explanation cards expose what, why, confidence, factors, evidence, next steps, data gaps, and weight version. Alert transitions and false-positive feedback are implemented in Python; notification is optional and unconfigured offline.
-- **Satellite:** numerical analysis functions implement pixel change fraction/percentage, cloud-confidence warnings, AOI/resolution refusal, connected hotspots, spectral indices, and simple land-cover labels. HTTP satellite endpoints remain placeholders and do not connect those functions to uploads.
+- **Satellite:** numerical analysis functions and the change API implement pixel change fraction/percentage, cloud-confidence warnings, AOI/resolution refusal, connected hotspots, spectral indices, land-cover labels, and evidence-only chat.
 - **Chat:** keyword-first intents are `what_changed`, `worst_area`, `how_much`, `compare_dates`, and `why_flagged`; unsupported or unavailable questions return safe evidence-only responses. It does not call an LLM.
 - **Cyber/environment:** rule-based analyzers score synthetic payloads and return reasons/evidence; environment supports flood/wildfire-style fields and a failure-safe comparison hook.
 - **Reports/replay:** Python helpers export CSV, GeoJSON, PDF, audit JSONL, and sorted/paged replay; the API currently exposes GeoJSON and incident PDF routes.
@@ -295,7 +296,7 @@ The generator also accepts `count`, `seed`, `noise`, and `drift`; invalid scenar
 
 ## Deployment and limitations
 
-This is a local prototype. For any real deployment, add durable storage, authentication and authorization, TLS, request limits, structured logging/metrics, queue/back-pressure, multi-worker-safe state, secrets management, retention controls, and an independent safety review. Do not expose the development server or `--reload` configuration to an untrusted network. The current API accepts unvalidated ingest dictionaries, does not persist raw inputs, has no user/account model, and does not provide real-time WebSocket broadcasts. Satellite upload/query/change routes and parts of the UI are placeholders.
+This is a local prototype. For any real deployment, add durable storage, authentication and authorization, TLS, request limits, structured logging/metrics, queue/back-pressure, multi-worker-safe state, secrets management, retention controls, and an independent safety review. Do not expose the development server or `--reload` configuration to an untrusted network. The current API accepts unvalidated ingest dictionaries, does not persist raw inputs, has no user/account model, and does not provide real-time WebSocket broadcasts. Real satellite feeds and parts of the UI remain future work.
 
 ## Contributing
 

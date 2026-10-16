@@ -6,7 +6,12 @@ router=APIRouter()
 def alerts(request:Request,page:int=1,limit:int=50):
  a=request.app.state.store.alerts; start=(max(page,1)-1)*limit; return {'items':a[start:start+limit],'page':page,'limit':limit,'total':len(a)}
 @router.get('/alerts/explanation/{alert_id}')
-def explanation(alert_id:str): return {'alert_id':alert_id,'explanation':'Rule-based explanation placeholder'}
+def explanation(request: Request, alert_id: str):
+    for alert in request.app.state.store.alerts:
+        if alert.get('id') == alert_id:
+            return {'alert_id': alert_id, 'explanation': alert.get('explanation', {})}
+    from .errors import ApiError
+    raise ApiError('ALERT_NOT_FOUND', 'alert not found', {'id': alert_id}, 404)
 @router.get('/alerts/{alert_id}/explanation')
 def explanation_canonical(request: Request, alert_id: str):
     for alert in request.app.state.store.alerts:

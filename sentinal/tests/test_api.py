@@ -1,4 +1,5 @@
 import pytest
+import io
 fastapi = pytest.importorskip('fastapi')
 from fastapi.testclient import TestClient
 from sentinal.api.main import app
@@ -35,3 +36,45 @@ def test_versioned_phase_routes_and_exports(client):
     assert geojson.headers['content-type'].startswith('application/geo+json')
     assert report.status_code == 200
     assert report.content.startswith(b'%PDF')
+
+
+def test_satellite_change_api_returns_analysis_and_chat(client):
+    response = client.post(
+        '/api/v1/satellite/change',
+        json={
+            'before': [[0, 0], [0, 0]],
+            'after': [[0, 1], [0, 0]],
+            'threshold': 0.5,
+            'question': 'How much changed?',
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'ok'
+    assert body['changed_fraction'] == pytest.approx(0.25)
+    assert body['chat']['intent'] == 'how_much'
+    assert body['hotspots'][0]['size'] == 1
+
+
+def test_json_upload_imports_events(client):
+    response = client.post(
+        '/api/v1/upload',
+        files={'file': ('events.json', io.BytesIO(b'{"events":[{"id":"uploaded-1","type":"satellite"}]}'), 'application/json')},
+    )
+    assert response.status_code == 200
+    assert response.json()['imported_events'] == 1
+    queried = client.get('/api/v1/satellite/query')
+    assert queried.json()['total'] >= 1
+
+
+def test_chat_api_is_evidence_only(client):
+    response = client.post(
+        '/api/v1/chat',
+        json={'question': 'What changed?', 'analysis': {'status': 'ok', 'changed_fraction': 0.25}},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        'intent': 'what_changed',
+        'answer': 'Detected change in the analyzed area.',
+        'evidence': {'changed_fraction': 0.25},
+    }

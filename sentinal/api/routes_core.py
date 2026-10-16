@@ -81,7 +81,21 @@ def run_named(name: str, request: Request, payload: dict | None = None):
 async def upload(request: Request, file: UploadFile=File(...)):
     data=await file.read(store(request).config['limits']['upload_bytes']+1)
     if len(data)>store(request).config['limits']['upload_bytes']: raise ApiError('LIMIT_EXCEEDED','upload too large',None,413)
-    return {'status':'accepted','filename':file.filename,'bytes':len(data),'placeholder':True}
+    imported = 0
+    if file.filename and file.filename.lower().endswith(".json"):
+        import json
+        try:
+            decoded = json.loads(data)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ApiError("INVALID_UPLOAD", "JSON upload could not be parsed") from exc
+        items = decoded if isinstance(decoded, list) else decoded.get("events", [decoded]) if isinstance(decoded, dict) else []
+        if not items or not all(isinstance(item, dict) for item in items):
+            raise ApiError("INVALID_UPLOAD", "JSON upload must contain an event object or events list")
+        if len(items) > 500:
+            raise ApiError("LIMIT_EXCEEDED", "too many events", {"max": 500}, 413)
+        store(request).events.extend(items)
+        imported = len(items)
+    return {'status':'accepted','filename':file.filename,'bytes':len(data),'imported_events':imported}
 @router.get('/config')
 def get_config(request: Request): return store(request).config
 @router.put('/config')

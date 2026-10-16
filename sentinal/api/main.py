@@ -11,6 +11,7 @@ from .routes_risk import router as risk_router
 from .routes_telemetry import router as telemetry_router
 from .routes_satellite import router as satellite_router
 from .routes_alerts import router as alerts_router
+from .routes_chat import router as chat_router
 from .websocket import router as ws_router
 
 class State:
@@ -24,18 +25,26 @@ app = FastAPI(title='SENTINAL API', version='1.0')
 app.state.store = State()
 app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
-for router in (core_router, risk_router, telemetry_router, satellite_router, alerts_router, ws_router): app.include_router(router, prefix='/api/v1' if router is not ws_router else '')
+for router in (core_router, risk_router, telemetry_router, satellite_router, alerts_router, chat_router, ws_router): app.include_router(router, prefix='/api/v1' if router is not ws_router else '')
 
 @app.get('/api/mission')
 def mission(request: Request):
-    """Small dashboard payload; the UI also has an offline fallback."""
+    """Return a compact dashboard payload from the current in-memory state."""
     store = request.app.state.store
+    alerts = store.alerts[-3:]
+    if alerts:
+        dashboard_alerts = [
+            [alert.get("level", "WATCH").upper(), alert.get("asset_id", "Unknown asset"), alert.get("status", "New")]
+            for alert in reversed(alerts)
+        ]
+        risk = round(float(alerts[-1].get("risk_score", 0)))
+    else:
+        dashboard_alerts = []
+        risk = 0
     return {
-        'risk': 72,
-        'alerts': [['CRITICAL', 'Power bus variance', 'SAT-04 · 2 min ago'],
-                   ['HIGH', 'Thermal trend rising', 'NODE-17 · 8 min ago'],
-                   ['WATCH', 'Link latency elevated', 'GROUND-02 · 14 min ago']],
-        'telemetry': [f'events buffered: {len(store.events)}', 'synthetic feed available'],
+        'risk': risk,
+        'alerts': dashboard_alerts,
+        'telemetry': [f'events buffered: {len(store.events)}', f'alerts tracked: {len(store.alerts)}'],
     }
 
 web_dist = Path(__file__).parents[1] / 'web' / 'dist'
