@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import csv
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,36 @@ import numpy as np
 
 class TelemetryMlError(RuntimeError):
     """A user-actionable error from the optional ML adapter."""
+
+
+def load_training_rows(path: str | Path) -> tuple[list[dict[str, Any]], list[int] | None]:
+    """Read user-supplied CSV/JSONL rows; never generates training data.
+
+    A ``label`` column/key is optional and is used only for evaluation.
+    """
+    source = Path(path)
+    if not source.is_file() or source.suffix.lower() not in {".csv", ".jsonl", ".ndjson"}:
+        raise TelemetryMlError("training data must be a user-supplied .csv or .jsonl file")
+    records = []
+    if source.suffix.lower() == ".csv":
+        with source.open(newline="", encoding="utf-8") as handle:
+            records = list(csv.DictReader(handle))
+    else:
+        records = [json.loads(line) for line in source.read_text(encoding="utf-8").splitlines() if line.strip()]
+    labels = [int(row.pop("label")) for row in records if "label" in row]
+    return records, labels if len(labels) == len(records) else None
+
+
+def evaluate_detector(detector: Any, rows: list[dict[str, Any]], labels: list[int] | None = None) -> dict[str, Any]:
+    """Evaluate with supplied labels, or explicitly report unvalidated status."""
+    predictions = [int(detector.model.predict([[float(row.get(name, detector.medians[name])) for name in detector.feature_names]])[0] < 0) for row in rows]
+    if labels is None:
+        return {"status": "unvalidated", "reason": "labels were not supplied", "samples": len(rows)}
+    if len(labels) != len(predictions):
+        raise TelemetryMlError("label count must match evaluation rows")
+    tp = sum(p == y == 1 for p, y in zip(predictions, labels)); tn = sum(p == y == 0 for p, y in zip(predictions, labels))
+    fp = sum(p == 1 and y == 0 for p, y in zip(predictions, labels)); fn = sum(p == 0 and y == 1 for p, y in zip(predictions, labels))
+    return {"status": "validated", "samples": len(rows), "accuracy": (tp + tn) / len(labels) if labels else 0.0, "precision": tp / (tp + fp) if tp + fp else 0.0, "recall": tp / (tp + fn) if tp + fn else 0.0, "confusion_matrix": [[tn, fp], [fn, tp]]}
 
 
 def load_telemetry_file(path: str | Path) -> np.ndarray:

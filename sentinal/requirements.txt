@@ -11,4 +11,4 @@ pytest==8.3.4
 httpx==0.28.1
 python-multipart==0.0.20
 # Optional GeoTIFF support; install separately when raster processing is enabled.
-# rasterio
+# rasterio  # optional real GeoTIFF processing (install from a compatible wheel)

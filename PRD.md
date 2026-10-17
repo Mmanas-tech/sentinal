@@ -1,313 +1,201 @@
 # SENTINAL Product Requirements Document
 
-**Status:** as-built requirements and roadmap baseline  
-**Scope:** the inspected workspace  
-**Safety position:** SENTINAL is decision support, not an autonomous control system. Qualified operators verify outputs before acting.
-
-**Companion documents:** [`README.md`](README.md) contains setup and operations instructions; [`pitch.md`](pitch.md) contains the judge-facing story and demo script.
+**Status:** as-built product requirements and upgrade baseline
+**Safety:** SENTINAL is decision support, not an autonomous command, targeting, or control system. All synthetic results require qualified human verification.
 
 ## 1. Executive summary
 
-SENTINAL is an offline-first Python/FastAPI prototype that turns synthetic space/defence telemetry and related environmental, satellite, and cyber observations into validated signals, explainable asset risk, alerts, and reports. It demonstrates a deterministic walkthrough across four scenarios and seven intentionally planted telemetry faults. The implementation is local, configuration-driven, and deliberately safe to demonstrate: it has an in-process event bus, a bounded in-memory view backed by local SQLite, and no live external feeds.
+SENTINAL turns heterogeneous space-and-defence signals into a validated, traceable decision-support result. The platform accepts canonical events from REST, local JSON/CSV/JSONL/NDJSON files, deterministic demo scenarios, a documented Open-Meteo weather adapter, and generic HTTP/NDJSON boundaries. Events are validated, persisted in local SQLite, processed by independently swappable modules, combined by the risk engine, and exposed through explanation snapshots, alerts, REST, WebSocket, reports, exports, and a React dashboard.
 
-This document distinguishes verified workspace behavior from the original aspirational roadmap. **Implemented** means supported by code and tests; **Partial** means a scaffold, placeholder, or optional path; **Future** means proposed work only.
+The key product invariant is:
+
+> Every accepted detector result and every alert must explain what happened, why it matters, what evidence supports it, what data is missing, how confident the system is, and what the next investigation step is.
+
+This repository contains a working local prototype. It does not claim operational satellite intelligence, classified data handling, production identity, HA, or validated real-world ML performance.
 
 ## 2. Problem statement
 
-Operators need to triage heterogeneous observations without losing provenance or trusting an opaque score. Raw packets may be malformed, late, stale, duplicated, or inconsistent; sources may conflict; and a high score without reasons is not actionable. SENTINAL normalizes events, validates telemetry, combines factors with explicit weights and dependency/correlation boosts, exposes confidence and data gaps, and provides recommended next steps. Synthetic fixtures make behavior reproducible and prevent the demo from implying operational truth.
+Operators receive telemetry, imagery, environmental observations, cyber indicators, and asset reports in separate systems. Manual cross-checking is slow and error-prone. An unexplained score creates alert fatigue; a clean-looking score can hide stale, missing, or conflicting data.
 
-## 3. Users and personas
+SENTINAL addresses the trust gap between raw signals and human decisions by providing validation, correlation, prioritization, provenance, and explanation in one workflow.
 
-| Persona | Need | Workspace outcome |
+## 3. Users
+
+| Persona | Need | SENTINAL surface |
 |---|---|---|
-| Mission/operations analyst | Identify what changed, severity, and reason quickly | Risk ranking, alert workflow, explanation, replay |
-| Telemetry engineer | Find packet-quality and command faults | Stateful validator, seven faults, health metrics |
-| Intelligence/environment analyst | Correlate environmental, satellite, and cyber evidence | Rule analyzers and risk factors |
-| Incident lead | Track, assign, resolve, and export an incident | Alert transitions and offline reports |
-| Developer/integrator | Replace synthetic sources safely | Canonical contracts and YAML configuration |
-| Demo/evaluation reviewer | Verify repeatability and safety | Offline demo, deterministic seeds, tests |
+| Analyst | Investigate evidence and change | Satellite functions, chat, explanation cards, exports |
+| Mission controller | Detect bad or suspicious telemetry | Validator, quarantine, health, WebSocket |
+| Commander | Prioritize assets and zones | Risk gauge, ranking, confidence, reports |
+| Responder | Act on clear next steps | Alerts, playbooks, plain-language explanations |
+| Integrator | Replace synthetic modules safely | Canonical Event/ModuleResult contracts and adapters |
 
 ## 4. Goals and non-goals
 
 ### Goals
-1. Provide a reproducible offline multi-source decision-support demonstration.
-2. Reject malformed canonical data and expose telemetry quality findings.
-3. Produce bounded, explainable risk with confidence, evidence, conflicts, and gaps.
-4. Keep module boundaries and configuration stable for later adapters.
-5. Provide local API, WebSocket, dashboard shell, alert, replay, and report paths.
 
-### Non-goals in this workspace
-- Autonomous command, targeting, actuation, evacuation, or mission control.
-- Real-time operational accuracy or replacement of qualified judgment.
-- SQLite/PostgreSQL persistence, a durable signal store, or multi-tenant service.
-- Real satellite, telemetry, weather, or cyber feeds; live map tiles; or production identity/security.
-- Production-grade forecasting/ML, HA deployment, model governance, or compliance certification.
+- Normalize diverse inputs into canonical UTC/WGS84 events.
+- Reject malformed, duplicate, stale, invalid, or unsupported inputs safely.
+- Detect rule violations and statistical anomalies without conflating them.
+- Combine telemetry, satellite, cyber, and environment factors through the configured risk formula.
+- Preserve event/source/timestamp provenance through risk and explanation outputs.
+- Make missing data, conflicts, confidence, and limitations visible.
+- Provide deterministic offline scenarios and real local file/GeoTIFF/provider paths.
+- Keep adapters and detectors replaceable without rewriting the risk core.
+
+### Non-goals in this release
+
+- Autonomous command or control.
+- Military activity, object, threat, or attribution classification from imagery.
+- Production identity, tenant isolation, HA, TLS, compliance, or classified-data handling.
+- Claiming operational ML precision/recall without a representative labeled dataset.
+- Claiming a failed or unconfigured provider is LIVE.
 
 ## 5. Current built solution
 
-Verified code and tests cover: Python package setup; Pydantic schemas; YAML loading and weight validation; deterministic `SyntheticGenerator`; `flood`, `wildfire`, `satellite_fault`, and `cyber_attack`; seven named faults; telemetry and command validation; rolling z-score and optional Isolation Forest interfaces; health tracking; satellite change masks/indices/hotspots; cyber and environment analyzers; weighted risk with asset importance, correlation, dependency cascade, confidence, data gaps, trend, hysteresis, and what-if; explanation/playbooks; alert grouping/workflow/replay/audit helpers; FastAPI routes and WebSocket; React/Vite dashboard assets; CSV, GeoJSON, and ReportLab PDF exports; chat intent routing; and the offline demo.
+```text
+source/file/provider
+        ↓
+adapter + validation + provenance
+        ↓
+canonical Event → SQLite → EventBus
+        ↓
+telemetry / satellite / cyber / environment modules
+        ↓
+factor scores + source status + event provenance
+        ↓
+RiskEngine: weights + importance + correlation + cascade + hysteresis
+        ↓
+ExplanationCard + Alert workflow
+        ↓
+FastAPI / WebSocket / React / PDF / CSV / GeoJSON / replay
+```
 
-Runtime state uses a bounded in-memory view backed by a local SQLite store for events, alerts, audit entries, and configuration snapshots. Satellite query/change routes support synthetic numeric analysis; real imagery/feed integration remains future. `/api/mission` exposes current buffered state and diagnostics. Optional bearer authentication/roles, correlation IDs, readiness, metrics, and bounded WebSocket validation are available. There is no verified live feed, map-tile integration, HA deployment, production identity provider, or complete compliance hardening.
+The runtime store is local SQLite through `sentinal/core/storage.py`. The bounded in-memory view, EventBus, risk history, hysteresis, and WebSocket clients remain process-local.
 
-## 6. User journeys
-
-### 6.1 Demonstrate a scenario
-Run `python -m sentinal.demo`; generate a seeded profile, optionally with `plant_anomalies=["all"]`; validate packets; analyze side-channel events; evaluate asset risk; build an explanation card; create an alert; and export/report results.
-
-### 6.2 Triage an alert
-Open the local dashboard or alert API; inspect level, label, reasons, evidence, confidence, trend, and gaps; assign/acknowledge/resolve or mark false positive; follow playbook next steps; export a report. The operator remains accountable.
-
-### 6.3 Investigate telemetry
-Submit a packet or raw JSON; inspect every finding and highest level; use `LATE`, `STALE`, `GAP`, and `DUPLICATE` tags; quarantine bad data and replay after correction.
-
-### 6.4 Explore risk
-Request ranked assets or `/risk/whatif`; compare factor contributions, correlation/cascade boosts, confidence, and source status. Counterfactuals must not mutate score history or hysteresis state.
-
-## 7. Functional requirements and status
+## 6. Requirements and status
 
 | ID | Requirement | Status |
 |---|---|---|
-| FR-001 | Accept canonical UTC events with typed geography, payload, schema version, raw reference, and metadata. | Implemented |
-| FR-002 | Reject naive timestamps, invalid coordinates/polygons, and extra fields. | Implemented |
-| FR-003 | Deduplicate publication per `(source_id,event.id)` in an async in-process bus. | Implemented |
-| FR-004 | Generate deterministic seeded scenario streams from YAML. | Implemented |
-| FR-005 | Plant and report seven telemetry fault types. | Implemented |
-| FR-006 | Validate fields, types, ranges, units, sequence, lateness, staleness, jumps, and statistical findings. | Implemented |
-| FR-007 | Validate commands against configured IDs, senders, and parameters. | Implemented |
-| FR-008 | Enforce a fixed module result with at least one reason. | Implemented |
-| FR-009 | Analyze telemetry, environment, cyber, and satellite-derived inputs. | Implemented for synthetic/local inputs; real imagery/feed integration is future |
-| FR-010 | Compute configurable, explainable asset risk. | Implemented |
-| FR-011 | Treat missing/unknown factors as gaps and redistribute active weights. | Implemented |
-| FR-012 | Apply correlation, dependency cascade, importance, and hysteresis. | Implemented |
-| FR-013 | Provide non-mutating what-if and ranked assets. | Implemented |
-| FR-014 | Build plain/technical explanation cards with evidence, confidence, and playbooks. | Implemented |
-| FR-015 | Group/rate-limit and transition alerts; retain false-positive feedback. | Implemented in memory |
-| FR-016 | Expose versioned API, consistent errors, bounded WebSocket backfill, and health. | Implemented; hardening partial |
-| FR-017 | Serve a local dashboard and mission summary. | Implemented local summary and connected scenario/chat workflows; map and some operator controls remain partial |
-| FR-018 | Export CSV, GeoJSON, PDF; replay timelines and what-if adapters. | Implemented offline |
-| FR-019 | Route bounded chat intents without an LLM dependency. | Implemented rule-based |
-| FR-020 | Ingest real feeds, process real imagery, provide live tiles, durable storage, and external notifications. | Partial: local durable storage exists; real feeds/imagery/tiles/external delivery are future |
-| FR-021 | Add production auth/RBAC, tenant isolation, encryption/key management, HA, and compliance. | Partial foundation: opt-in local auth/roles and correlation/diagnostics exist; enterprise identity, isolation, encryption, HA, and compliance are future |
+| REQ-001 | Canonical UTC/WGS84 Event with raw reference and metadata | Implemented and tested |
+| REQ-002 | Module result with score, label, reasons, evidence, confidence, timestamp | Implemented and tested |
+| REQ-003 | Seeded flood, wildfire, satellite fault, cyber attack scenarios | Implemented and tested |
+| REQ-004 | Seven planted telemetry fault classes | Implemented and tested |
+| REQ-005 | CSV, JSONL, NDJSON file adapters with row/line errors | Implemented and tested |
+| REQ-006 | Generic HTTP and HTTP NDJSON adapter boundaries | Implemented; provider configuration required |
+| REQ-007 | Real public weather adapter | Open-Meteo implemented and live-smoke verified |
+| REQ-008 | Deterministic telemetry rules, quarantine, command validation | Implemented and tested |
+| REQ-009 | Local Isolation Forest artifact training/inference/evaluation | Implemented; unvalidated without labels |
+| REQ-010 | Risk formula, gaps, conflicts, provenance, what-if, hysteresis | Implemented and tested |
+| REQ-011 | Evidence-grounded explanation and why-not | Implemented for stored factor data; UI linking partial |
+| REQ-012 | Numeric satellite change/indices/hotspots | Implemented as TEST/DEMO mode |
+| REQ-013 | Real GeoTIFF change pipeline | Optional Rasterio implementation and fixture tests |
+| REQ-014 | Cyber/environment rule analyzers and correlation | Implemented for supplied payloads |
+| REQ-015 | Alert workflow, audit, replay, reports, exports | Implemented locally; operational delivery partial |
+| REQ-016 | API and WebSocket status/provenance | Implemented locally; broker/HA partial |
+| REQ-017 | React mission-control UI | Implemented local shell; full map/control coverage partial |
 
-## 8. Architecture and module boundaries
+## 7. Canonical contracts
 
-Intended flow: `sources -> ingestion/normalizer -> contracts -> event bus -> detectors -> risk -> explainability -> alerts/API/dashboard/reports`. Current execution is local and directly connected through typed API boundaries, a durable local runtime store, and an in-process event bus; external source adapters remain future.osed rather than distributed.
-
-- `core`: Pydantic schemas, contracts, YAML loader, event bus.
-- `ingestion`: synthetic generator and scenario profiles; future adapters belong here.
-- `modules/telemetry`: packet/command rules, statistics, health.
-- `modules/satellite`: numeric change detection, indices, hotspots; no feed client.
-- `modules/cyber`, `environment`: rule-based analyzers.
-- `risk`: factor normalization, weighted engine, correlation, cascade, hysteresis.
-- `explain`: cards, confidence, templates, playbooks.
-- `alerts`: workflow, grouping, notifier, audit/replay helpers.
-- `api`: FastAPI routes, durable local runtime state, errors, WebSocket.
-- `reports`: offline serializers/exporters.
-- `chat`: deterministic intent router.
-- `web`: Vite/React dashboard build.
-- `config`: versioned YAML policy and fixture data.
-
-Modules consume `Event` (or documented mappings) and emit `ModuleResult`; they do not own risk policy, UI state, or transport credentials. Risk owns score semantics, explanation owns presentation, and API owns transport/errors.
-
-## 9. Canonical contracts
-
-### 9.1 Event
+### Event
 
 ```json
 {
-  "id": "stable-id",
+  "id": "evt-001",
   "source_id": "source-1",
   "type": "telemetry",
   "timestamp": "2026-01-01T00:00:00Z",
   "received_at": "2026-01-01T00:00:01Z",
-  "geo": {"lat": 35.0, "lon": -100.0},
+  "geo": {"lat": 51.05, "lon": 13.74},
   "payload": {},
   "schema_version": "1.0",
-  "raw_ref": "synthetic://stable-id",
-  "metadata": {}
+  "raw_ref": "source://evt-001",
+  "metadata": {"source_status": "FILE-BASED"}
 }
 ```
-`id`, `source_id`, `type`, `raw_ref`, and schema version are non-empty. Timestamps must be timezone-aware and normalized to UTC. `geo` is a validated WGS84 `GeoPoint`, validated minimal GeoJSON `Polygon`, or null. Payload and metadata are mappings.
 
-### 9.2 ModuleResult
+Timestamps must be timezone-aware and are normalized to UTC. Geo is WGS84. Events are deduplicated by `(source_id, id)`.
+
+### ModuleResult
 
 ```json
 {
-  "module": "telemetry",
-  "signal_id": "battery-range",
+  "module": "telemetry_validator",
+  "signal_id": "sig-001",
   "score": 0.82,
   "label": "high",
   "reasons": [{"code": "OUT_OF_RANGE", "detail": "battery_v=999"}],
-  "evidence": [{"type": "event", "ref": "stable-id", "detail": "packet"}],
-  "confidence": 0.9,
+  "evidence": [{"type": "event", "ref": "evt-001"}],
+  "confidence": 0.8,
   "timestamp": "2026-01-01T00:00:01Z"
 }
 ```
-Scores and confidence are 0–1; reasons are required; evidence is structured and may be empty; timestamp is UTC; unknown fields are rejected. `validate_module_result` is the contract gate.
 
-## 10. Data and configuration model
+The contract rejects missing reasons, out-of-range score/confidence, naive timestamps, and unexpected fields.
 
-YAML files are the source of current policy: `schemas.yaml` (event/packet fields, units, limits, sequence/lateness/staleness), `weights.yaml` (factor weights, versions, correlation/cascade policies), `thresholds.yaml` (risk bands, hysteresis and detector limits), `playbooks.yaml` (next steps), `assets.yaml` (four synthetic WGS84 assets and dependencies), and `scenarios.yaml` (four profiles, cadence, baseline, noise/drift, faults). `load_config` validates the bundle and risk weights sum to the configured target.
+## 8. Domain requirements
 
-The risk engine keeps only process-local history and hysteresis. Events, alerts, and configuration updates are not durable across restart. Timestamps are UTC; coordinates are WGS84/EPSG:4326. Synthetic values are test fixtures, not operational data.
+### Ingestion
 
-## 11. Domain requirements
+Adapters must validate input, attach source/provenance/raw references, preserve UTC timestamps, report errors, detect duplicates, and expose one of `LIVE`, `FILE-BASED`, `DEMO`, `DEGRADED`, or `OFFLINE`. A provider failure must not silently become synthetic data.
 
-### 11.1 Synthetic scenarios and planted faults
+### Telemetry
 
-The generator emits one telemetry event per requested sample plus a profile-specific side event. Supported scenarios are `flood`, `wildfire`, `satellite_fault`, and `cyber_attack`. `count` is packet count, seed controls repeatability, and `noise`/`drift` are configurable. `plant_anomalies=["all"]` plants one each of:
+Rules cover required/null fields, types, ranges, units, unknown fields, sequence duplicates/gaps/out-of-order, rollover, session/boot reset, late/stale data, clock drift, sudden jumps, quarantine, and incident grouping. Isolation Forest is explicit and artifact-backed; evaluation is `unvalidated` unless labels are supplied.
 
-1. `missing_field` (configured `temp_c` removed)
-2. `out_of_range` (`battery_v=999`)
-3. `wrong_type` (`temp_c` becomes non-numeric)
-4. `duplicate_sequence`
-5. `gap_out_of_order` (sequence jump and timestamp offset)
-6. `stale_data` (timestamp aged by 180 seconds)
-7. `sudden_jump` (temperature delta)
+### Risk
 
-The result records event ID, index, and fault type. Unknown faults, duplicate selections, non-positive counts, and invalid numeric parameters are rejected.
+```text
+Base = Σ(weight_i × factor_i)
+Risk = min(100, Base × (0.5 + 0.5 × importance / 100)
+          + correlation_boost + cascade_boost)
+```
 
-### 11.2 Telemetry and command validation
+Risk outputs include contributions, event/source/timestamp provenance, weights version, confidence, data gaps, conflicts, trend, and hysteresis state.
 
-The validator must report all findings, highest level (`OK`, `WARN`, `ERROR`, `CRITICAL`), tags, quarantine decision, and incident grouping. It tracks source state for sequence rollover, resets, packet latency, bursts, replay safety, stale data, gaps, duplicates, and jumps. Optional rolling z-score and disabled-by-default Isolation Forest use the shared detector interface. Health covers power, thermal, communications, packet loss, and latency.
+### Explainability
 
-### 11.3 Satellite
+Cards are snapshots. They include alert identity, what, why, factors, score contributions, evidence, provenance, confidence, data gaps, next steps, recommendation rationale, and weights version. Why-not uses stored score/factor/threshold evidence and returns `insufficient-evidence` when evidence is absent.
 
-Implemented numeric utilities and local API routes calculate difference masks, spectral indices, land-cover classification, and ranked hotspots from supplied numeric arrays. The product requirement is met for synthetic/local inputs with threshold, cloud cover, AOI, and QA metadata; no real imagery, STAC, raster tile, cloud masking service, or live tiles exists. Real imagery ingestion and operational QA are future.
+### Satellite
 
-### 11.4 Environment
+Numeric arrays are labeled TEST/DEMO. Real GeoTIFF processing is optional and validates CRS, dimensions, bands, NoData, acquisition tags, grid alignment, and provenance before producing georeferenced masks/hotspots. It does not classify military activity.
 
-Environment analysis consumes supplied mappings and rule thresholds, with optional station/satellite hooks. It must label and explain environmental hazard factors; the current analyzer is rule-based and offline. Weather feeds, forecasts, provenance, and live stations are future.
+## 9. API surface
 
-### 11.5 Cyber
+The API is under `/api/v1` and uses `{ "error": { "code", "message", "details" } }` for structured errors. Important paths include:
 
-Cyber analysis consumes supplied indicators such as protocol, source IP, failed logins, and packets/sec and returns rule-based severity/evidence. It is not a network sensor, IDS, packet capture, attribution engine, or production security boundary. Trusted scanners and live SIEM integrations are future.
+- `POST /ingest`, `POST /ingest/{type}`
+- `POST /upload`
+- `POST /sources/open-meteo`
+- `POST /scenarios/{name}/run`
+- `POST /telemetry/validate`
+- `POST /ml/telemetry/analyze`, `POST /ml/telemetry/train`
+- `GET /risk/assets`, `POST /risk/whatif`
+- `POST /satellite/change`, `GET/POST /satellite/query`
+- `POST /satellite/change-upload` for two GeoTIFF uploads when Rasterio is installed
+- `POST /chat`
+- `GET /alerts`, `PATCH /alerts/{id}`
+- `GET /alerts/{id}/explanation`, `GET /alerts/{id}/why-not/{zone}`
+- `GET /status`, `GET /diagnostics`, `GET /health`, `GET /ready`, `GET /metrics`
+- `GET /export/csv`, `GET /export/geojson`, `GET /reports/{incident_id}`
+- WebSocket `/ws/stream`
 
-### 11.6 Risk and cascade
+## 10. Testing and acceptance
 
-Risk combines configured normalized factors (currently four configured factors) with active-weight redistribution, asset importance, source correlation, dependency cascade, and hysteresis. It returns exact score, level, label, factor contributions/scores, reasons, evidence, confidence, data gaps, conflicts, boosts, trend, hysteresis state, source status, and `weights_version`. Asset registry rejects missing dependencies and cycles. `what_if` is side-effect free.
+The current workspace verifies:
 
-### 11.7 Explainability
+- `104 passed, 1 skipped` with `python -m pytest -q sentinal/tests`.
+- Vite frontend production build succeeds.
+- The offline demo runs all four scenarios and detects all planted telemetry faults.
+- Open-Meteo returned one normalized LIVE event in the direct provider smoke test.
+- Rasterio-generated GeoTIFF fixtures verify NoData, CRS/grid alignment, provenance, and georeferenced hotspots.
 
-Every alert/result must be readable in plain mode and support a technical mode. Cards include what happened, why, score/level, confidence, evidence references, data gaps/conflicts, trend, and playbook next steps. “Why not” responses explain insufficient evidence or threshold failure. Templates are rule-based; there is no claim of LLM-generated factual grounding.
+The release does not claim operational accuracy, provider uptime, HA recovery, or production security.
 
-### 11.8 Alerts
+## 11. Roadmap
 
-Alerts have ID, asset, level, state, assignee, explanation/card-derived content, and feedback. Workflow supports transitions, assignment, resolution, and false-positive marking. Grouping/rate limiting is process-local. Telegram is optional injected transport; production email/SMS/webhooks and durable alert history are future.
-
-### 11.9 API and WebSocket
-
-Implemented route families include `/api/v1/health`, ingest, named scenarios, upload, config, event export, incident report, telemetry validation, risk assets/what-if, alerts/explanation/why-not/update, satellite query/change, and `/ws/stream`. Errors use `{ "error": { "code", "message", "details" } }`; FastAPI validation is handled centrally. WebSocket clients can request bounded backfill. Upload limits are configured, but authentication, rate limiting, API version migration policy, and durable pagination are not production-complete.
-
-### 11.10 Dashboard
-
-The local React/Vite build is served when `web/dist` exists. It presents current mission summary, risk, alerts, telemetry, scenario launch, and evidence-only chat. It is not a live operational map; live map tiles, full interaction coverage, and accessibility audit remain work.
-
-### 11.11 Reports and exports
-
-CSV and GeoJSON use standard-library serializers; PDF uses ReportLab; timeline replay sorts events in UTC and supports a what-if adapter. Exports are local and do not enforce role permissions because roles do not exist. Retention, redaction, signed reports, and archival storage are future.
-
-## 12. Reliability, security, accessibility, and observability
-
-### Reliability requirements
-- Deterministic seed and configuration version must reproduce a run.
-- Invalid input must fail at a boundary without crashing unrelated processing.
-- Module failures should be isolated and surfaced as data gaps in a future orchestrator.
-- Health must report service status and buffered counts.
-- Current limitation: local SQLite persistence exists, but no queue, retry, HA, or backpressure system exists.
-
-### Security requirements
-- Validate all API inputs and file sizes/types; never execute uploaded content.
-- Keep secrets out of source and use environment/vault integration when transports are enabled.
-- Preserve source references and audit changes where available.
-- Current limitation: opt-in local bearer auth/roles exist, but there is no enterprise identity, tenant isolation, TLS deployment, encryption/key management, dependency policy, or complete threat model. Synthetic demo data must not be treated as classified/operational data.
-
-### Accessibility and usability
-- Plain-language explanation by default; technical detail on demand.
-- Never encode severity by color alone; provide text/icons and keyboard-accessible controls.
-- Target WCAG AA contrast and an alert readable in under ten seconds.
-- Current limitation: no verified WCAG audit or end-user study.
-
-### Observability
-- Preserve correlation/event IDs in logs and evidence.
-- Measure ingest rate, queue/buffer depth, module latency, alert counts, validation findings, and false-positive feedback.
-- Current workspace provides health/readiness, correlation IDs, and local counters but no structured logging pipeline, metrics backend, tracing, or ops page.
-
-## 13. Edge cases
-
-Naive or non-UTC timestamps; invalid latitude/longitude; open/invalid polygon rings; unknown scenario/fault; duplicate fault request; count smaller than requested faults; non-finite/negative noise or interval; wrong packet JSON/type; missing required fields; out-of-range and unit mismatch; sequence rollover/reset; duplicate, gap, out-of-order, stale, late, or sudden-jump packets; duplicate event publication; unknown asset/factor; missing/offline factors; conflicting sources; dependency cycle/missing dependency; empty reasons/evidence; score/confidence outside bounds; what-if accidentally mutating history; malformed config/weights; oversized upload; missing WebSocket client; empty alert/report query; and process restart loss must all have deterministic validation or an explicit documented degraded response.
-
-## 14. Testing and validation
-
-The repository contains focused tests for API, core contracts/bus, cyber/environment, explainability/alerts, phase polish, reports/replay, risk, satellite/chat, synthetic generation, and telemetry. The standard check is `python -m pytest -q sentinal/tests` (also `make test`); the offline walkthrough is `python -m sentinal.demo`.
-
-Required validation includes: unit coverage for every validator rule and seven faults; canonical schema/contract rejection tests; deterministic seed golden outputs; risk weight-sum, boundary, missing-factor, correlation, cascade, hysteresis, and non-mutating what-if tests; explanation schema checks; scenario end-to-end expected alerts; API error and upload-limit tests; report parseability; malformed/injection-like input tests; and dashboard smoke/accessibility checks. Load replay, chaos/recovery, real imagery IoU, security penetration, and user comprehension testing are acceptance gates for later phases, not evidence that the current prototype has passed them.
-
-## 15. Acceptance criteria
-
-### Current prototype acceptance
-- All four scenarios run offline with a fixed seed.
-- `plant_anomalies=["all"]` produces one recorded instance of each seven faults and validation identifies them.
-- Canonical events reject invalid time/geo/extra-field input.
-- Every accepted module result has at least one reason and valid bounds.
-- Risk output contains score, level, factor contributions, reasons, confidence, evidence/gaps, source status, and weights version.
-- What-if does not change history or hysteresis.
-- Explanation cards contain what/why/evidence/next steps and can render plain text.
-- Alert transitions, exports, replay, API health, and the local demo complete without network credentials.
-- `pytest` suite passes and no requirement claims durable persistence, real feeds, live tiles, or production security.
-
-### Future production acceptance
-- Real-feed provenance and outage behavior are demonstrated.
-- Durable storage, RBAC, audit retention, TLS, rate limits, backup/restore, HA, and threat review are independently verified.
-- Imagery QA/ground truth, performance SLOs, accessibility audit, and operator usability evidence are recorded.
-
-## 16. Demo success metrics
-
-For the current demo: complete all four scenarios in under three minutes on a developer workstation; zero network/API credentials; deterministic output for a fixed seed; seven of seven planted faults detected; every displayed alert has reasons and evidence or an explicit gap; risk and what-if are reproducible; and the full test suite passes. These are engineering/demo metrics, not operational accuracy or false-positive claims.
-
-## 17. Current limitations and verified gaps
-
-- No SQLite, PostgreSQL, PostGIS, TimescaleDB, or other persistence exists.
-- No real feeds, external satellite catalog, live weather/cyber source, or live map tiles exists.
-- Real satellite feeds, imagery QA, and live map tiles are not implemented.
-- Dashboard map, reports navigation, and some operator controls remain incomplete.
-- API state, alert history, hysteresis, and audit behavior are process-local.
-- No production authentication, RBAC, tenant boundaries, TLS deployment, secrets vault, encryption, or compliance evidence.
-- Telegram is optional/no-op without injected configuration; no guaranteed delivery.
-- ML detector interface exists, but enabled production anomaly modeling, training, calibration, and governance do not.
-- No HA queue, retry/dead-letter handling, durable metrics/tracing, or formal SLOs.
-- Synthetic results must not be used as operational decisions or control inputs.
-
-## 18. Future roadmap
-
-| Phase | Scope | Status |
-|---|---|---|
-| Prototype/polish | Synthetic scenarios, contracts, telemetry, risk, explanation, alerts, API/dashboard shell, reports, replay, chat | Built in workspace |
-| Pilot | Real public Sentinel/FIRMS/weather feeds, imagery pipeline, Postgres/PostGIS, auth/RBAC, notifications, calibrated statistical detectors | Future |
-| Product | Kafka/queue, STAC catalog, model registry, CNN/LSTM/forecasting, multi-tenant cloud, offline/mobile modes, multilingual UX | Future |
-| Operational | HA, external command-system integrations, governance, compliance, human-in-the-loop review, audited SLOs | Future |
-
-Roadmap items must not be presented as current capability until code, tests, operational configuration, and evidence land in this workspace.
-
-## 19. Integration points
-
-Current integration seams are canonical `Event` and `ModuleResult`, YAML configuration, FastAPI JSON routes, WebSocket stream, synthetic adapter, optional station/satellite hooks in environment analysis, optional trusted scanners in cyber analysis, injected Telegram transport, CSV/GeoJSON/PDF exporters, and replay/what-if callbacks. Planned integrations include CCSDS/custom telemetry, Sentinel-2/FIRMS/STAC, weather/station APIs, SIEM/SOC feeds, Postgres/PostGIS/TimescaleDB, Kafka/Redis, identity providers, email/SMS/webhooks, map providers, model registries, and external command systems. Each must define provenance, auth, rate limits, outage/degraded mode, retention, and human approval boundaries.
-
-## 20. Open questions
-
-1. Which real public and operational feeds, formats, licensing, and provenance rules are required?
-2. Which imagery QA, cloud-cover, AOI, and ground-truth standards define acceptable change detection?
-3. Which identity provider, roles, tenant model, retention, and audit policy apply?
-4. What latency, availability, replay, and recovery SLOs are needed?
-5. Which alert channels and delivery guarantees are authorized?
-6. Who owns factor calibration, false-positive review, and model/version approval?
-7. What is the approved boundary between decision support and any external command system?
-8. Which map provider and offline tile strategy are acceptable?
-9. Which data classifications and redaction rules govern exports and reports?
-10. What operator research defines alert comprehension and accessibility success?
-
-## 21. Definition of done for the current release
-
-The offline demo, tests, and local API/dashboard run from documented commands; all current requirements marked Implemented are exercised; seven planted telemetry faults are visible in results; explanations retain reasons and provenance; the safety positioning is visible; and documentation clearly labels placeholders, in-memory behavior, synthetic data, and roadmap work.
-
-> **Positioning line:** SENTINAL does not replace experts. It helps them decide faster, with clear reasons.
+1. Add approved Sentinel/Landsat/STAC/FIRMS and telemetry/SIEM adapters with credentials and licensing.
+2. Add MQTT/Kafka/Redis transport with broker auth, replay, backpressure, and multi-worker fan-out.
+3. Add representative labeled telemetry/raster datasets, calibration, model registry, drift monitoring, and independent evaluation.
+4. Add PostGIS, migrations, retention, RBAC/identity, TLS, audit retention, backups, HA, and observability.
+5. Add live map overlays, cloud masks, tile caching, richer geospatial QA, and operator usability/accessibility validation.

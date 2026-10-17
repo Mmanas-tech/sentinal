@@ -20,11 +20,33 @@ def explanation_canonical(request: Request, alert_id: str):
             return {'alert_id': alert_id, **alert.get('explanation', {'what': alert.get('what', ''), 'why': alert.get('reasons', [])})}
     from .errors import ApiError
     raise ApiError('ALERT_NOT_FOUND', 'alert not found', {'id': alert_id}, 404)
+def _why_not_payload(alert: dict, zone: str | None = None) -> dict:
+    exp = alert.get('explanation') or {}
+    provenance = exp.get('provenance') or []
+    if not exp and not provenance:
+        return {'why_not': 'insufficient-evidence', 'limitation': 'No stored risk or factor data is available.'}
+    score = float(alert.get('risk_score', 0) or 0)
+    factors = exp.get('factors') or {}
+    selected = [(p, float(factors.get(p.get('factor'), 0))) for p in provenance if not zone or p.get('factor') == zone]
+    if zone and not selected:
+        return {'why_not': 'insufficient-evidence', 'limitation': f'No stored factor data for {zone}.'}
+    threshold = 60.0
+    if score >= threshold:
+        return {'why_not': 'threshold-met', 'comparison': {'score': score, 'threshold': threshold, 'delta': score-threshold}}
+    gaps = exp.get('data_gaps') or []
+    return {'why_not': 'threshold-not-met', 'comparison': {'score': score, 'threshold': threshold, 'delta': score-threshold},
+            'limitation': '; '.join(gaps) if gaps else None, 'factors': selected}
+
 @router.get('/alerts/{alert_id}/why-not')
-def why_not(alert_id:str): return {'alert_id':alert_id,'why_not':'Insufficient evidence or threshold not met'}
+def why_not(request: Request, alert_id:str):
+    alert = next((a for a in request.app.state.store.alerts if a.get('id') == alert_id), None)
+    if not alert: return {'alert_id': alert_id, 'why_not': 'insufficient-evidence', 'limitation': 'Alert not found'}
+    return {'alert_id': alert_id, **_why_not_payload(alert)}
 @router.get('/alerts/{alert_id}/why-not/{zone}')
-def why_not_zone(alert_id: str, zone: str):
-    return {'alert_id': alert_id, 'zone': zone, 'why_not': 'No stored factor exceeded the configured alert threshold.'}
+def why_not_zone(request: Request, alert_id: str, zone: str):
+    alert = next((a for a in request.app.state.store.alerts if a.get('id') == alert_id), None)
+    payload = _why_not_payload(alert or {}, zone)
+    return {'alert_id': alert_id, 'zone': zone, **payload}
 @router.patch('/alerts/{alert_id}')
 def update_alert(request: Request, alert_id: str, payload: dict, _: str = Depends(require_role('admin', 'operator'))):
     for alert in request.app.state.store.alerts:

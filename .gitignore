@@ -14,3 +14,6 @@ build/
 node_modules/
 sentinal/web/dist/
 .sentinal/
+*.iforest.json
+*.keras
+*.h5

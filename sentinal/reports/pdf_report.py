@@ -153,9 +153,15 @@ def generate_pdf(records: Iterable[Any], *, title: str = "SENTINAL Risk Report")
         factors = explanation.get("factors") or {}
         if factors:
             story.append(Paragraph("Factor contributions", styles["Section"]))
-            factor_rows = [[Paragraph("<b>Factor</b>", styles["BodySmall"]), Paragraph("<b>Contribution</b>", styles["BodySmall"])]]
-            factor_rows.extend([Paragraph(escape(str(name)), styles["BodySmall"]), Paragraph(escape(_value(value)), styles["BodySmall"])] for name, value in factors.items())
-            factor_table_rows = [factor_rows[0]] + [[factor_rows[i], factor_rows[i + 1]] for i in range(1, len(factor_rows), 2)]
+            factor_table_rows = [[
+                Paragraph("<b>Factor</b>", styles["BodySmall"]),
+                Paragraph("<b>Contribution</b>", styles["BodySmall"]),
+            ]]
+            for name, value in factors.items():
+                factor_table_rows.append([
+                    Paragraph(escape(str(name)), styles["BodySmall"]),
+                    Paragraph(escape(_value(value)), styles["BodySmall"]),
+                ])
             story.append(Table(factor_table_rows, colWidths=[3.7 * inch, 2.25 * inch], style=TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8eef6")),
                 ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),

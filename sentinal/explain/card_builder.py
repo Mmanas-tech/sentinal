@@ -17,9 +17,11 @@ class ExplanationCard:
     data_gaps: tuple[str, ...]
     weights_version: str
     reasons: tuple[Mapping[str, str], ...] = field(default_factory=tuple)
+    provenance: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
     def __post_init__(self):
         object.__setattr__(self, 'factors', MappingProxyType(dict(self.factors)))
         object.__setattr__(self, 'confidence', max(0.0, min(1.0, float(self.confidence))))
+        object.__setattr__(self, 'provenance', tuple(dict(item) for item in self.provenance))
 
 
 def build_card(
@@ -39,8 +41,10 @@ def build_card(
         else:
             selected = default_steps.get(result.level, []) if isinstance(default_steps, dict) else []
         next_steps = list(selected) if isinstance(selected, list) else []
+    rationale = tuple(f"{step}: applies to {result.level} risk (score {result.score:.1f})" for step in (next_steps or []))
     return ExplanationCard(
         what=f"{result.label} risk for asset {result.asset_id} (score {result.score:.1f})",
         why=why or ('No specific reason was recorded.',), confidence=result.confidence,
         factors=result.factors, evidence=evidence, next_steps=tuple(next_steps or ()),
-        data_gaps=tuple(result.data_gaps), weights_version=result.weights_version, reasons=reasons)
+        data_gaps=tuple(result.data_gaps), weights_version=result.weights_version, reasons=reasons,
+        provenance=tuple(result.provenance))

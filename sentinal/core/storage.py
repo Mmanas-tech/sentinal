@@ -49,8 +49,32 @@ class RuntimeStore:
                     payload TEXT NOT NULL,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS findings (
+                    event_id TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS quarantine (
+                    event_id TEXT PRIMARY KEY,
+                    event TEXT NOT NULL,
+                    finding TEXT NOT NULL,
+                    model_output TEXT,
+                    provenance TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS module_results (
+                    event_id TEXT PRIMARY KEY,
+                    asset_id TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
                 """
             )
+            for statement in ("ALTER TABLE quarantine ADD COLUMN model_output TEXT", "ALTER TABLE quarantine ADD COLUMN provenance TEXT"):
+                try:
+                    self._connection.execute(statement)
+                except sqlite3.OperationalError:
+                    pass
 
     def events(self, limit: int = 500) -> list[dict[str, Any]]:
         with self._lock:
@@ -113,6 +137,27 @@ class RuntimeStore:
                 updated_at=CURRENT_TIMESTAMP
                 """,
                 (name, json.dumps(payload, sort_keys=True, default=str)),
+            )
+
+    def save_finding(self, event_id: str, finding: dict[str, Any]) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                "INSERT OR REPLACE INTO findings(event_id, payload) VALUES (?, ?)",
+                (event_id, json.dumps(finding, sort_keys=True, default=str)),
+            )
+
+    def save_quarantine(self, event_id: str, event: dict[str, Any], finding: dict[str, Any], model_output: dict[str, Any] | None = None, provenance: dict[str, Any] | None = None) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                "INSERT OR REPLACE INTO quarantine(event_id, event, finding, model_output, provenance) VALUES (?, ?, ?, ?, ?)",
+                (event_id, json.dumps(event, sort_keys=True, default=str), json.dumps(finding, sort_keys=True, default=str), json.dumps(model_output, sort_keys=True, default=str) if model_output is not None else None, json.dumps(provenance, sort_keys=True, default=str) if provenance is not None else None),
+            )
+
+    def save_module_result(self, event_id: str, asset_id: str, result: dict[str, Any]) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                "INSERT OR REPLACE INTO module_results(event_id, asset_id, payload) VALUES (?, ?, ?)",
+                (event_id, asset_id, json.dumps(result, sort_keys=True, default=str)),
             )
 
     def close(self) -> None:

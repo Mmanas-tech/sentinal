@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, UploadFile, File
 
 from sentinal.chat import route as route_question
-from sentinal.modules.satellite import analyze_change, rank_hotspots
+from sentinal.modules.satellite import analyze_change, rank_hotspots, analyze_rasters
 from .errors import ApiError
 
 router = APIRouter()
+MAX_RASTER_BYTES = 50_000_000
 
 
 def _array(payload: dict[str, Any], name: str) -> np.ndarray:
@@ -39,6 +40,13 @@ def _json_value(value: Any) -> Any:
 
 @router.post("/satellite/change")
 def change(request: Request, payload: dict[str, Any]):
+    if payload.get("before_raster") is not None or payload.get("after_raster") is not None:
+        if payload.get("before_raster") is None or payload.get("after_raster") is None:
+            raise ApiError("INVALID_SATELLITE_REQUEST", "before_raster and after_raster are both required")
+        result = analyze_rasters(payload["before_raster"], payload["after_raster"],
+                                 before_band=int(payload.get("before_band", 1)), after_band=int(payload.get("after_band", 1)),
+                                 threshold=float(payload.get("threshold", .15)), resampling=str(payload.get("resampling", "bilinear")))
+        return _json_value(result)
     before = _array(payload, "before")
     after = _array(payload, "after")
     try:
@@ -63,6 +71,22 @@ def change(request: Request, payload: dict[str, Any]):
     if question is not None:
         result["chat"] = route_question(question, result)
     return result
+
+
+@router.post("/satellite/change-upload")
+async def change_upload(
+    before_file: UploadFile = File(...),
+    after_file: UploadFile = File(...),
+    threshold: float = 0.15,
+    resampling: str = "bilinear",
+):
+    """Process two uploaded GeoTIFFs without treating numeric arrays as imagery."""
+    before = await before_file.read(MAX_RASTER_BYTES + 1)
+    after = await after_file.read(MAX_RASTER_BYTES + 1)
+    if len(before) > MAX_RASTER_BYTES or len(after) > MAX_RASTER_BYTES:
+        raise ApiError("LIMIT_EXCEEDED", "each raster upload must be at most 50 MB")
+    result = analyze_rasters(before, after, threshold=threshold, resampling=resampling)
+    return _json_value(result)
 
 
 def _filtered_events(request: Request, payload: dict[str, Any] | None = None) -> list[dict[str, Any]]:

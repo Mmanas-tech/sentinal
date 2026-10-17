@@ -2,6 +2,8 @@
 
 SENTINAL is a decision-support platform for space and defence intelligence. **Phase 12 is complete:** the repository contains the core contracts, deterministic synthetic scenarios, telemetry/command validation, risk analysis, explainability, alerts, API/WebSocket, dashboard shell, satellite/chat analysis, cyber/environment modules, reports, exports, replay, and an offline demo.
 
+The post-audit real/local upgrade adds CSV/JSONL/NDJSON adapters, a real Open-Meteo weather adapter, an artifact-backed local Isolation Forest path, and optional Rasterio GeoTIFF processing. See the root [`README.md`](../README.md), [`AUDIT_REPORT.md`](../AUDIT_REPORT.md), [`IMPLEMENTATION_REPORT.md`](../IMPLEMENTATION_REPORT.md), and [`TEST_REPORT.md`](../TEST_REPORT.md) for verified status and blockers.
+
 ## Architecture
 
 The intended flow is `sources -> ingestion -> normalizer -> event bus -> modules -> signal store -> risk engine -> explainability -> API/dashboard`. Modules are independent detectors for satellite, telemetry, cyber, and environment data. Rules and configuration are external so later implementations can replace rule-based detectors with ML without changing their interfaces.

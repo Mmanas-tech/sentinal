@@ -30,8 +30,8 @@ class FactorInput:
         self.certainty = float(self.certainty)
         if not math.isfinite(self.score) or not 0 <= self.score <= 100:
             raise ValueError("factor score must be finite and between 0 and 100")
-        if self.status not in {"active", "offline", "unknown"}:
-            raise ValueError("factor status must be active, offline, or unknown")
+        if self.status not in {"active", "offline", "unknown", "stale", "conflict"}:
+            raise ValueError("factor status must be active, offline, unknown, stale, or conflict")
         if not 0 <= self.certainty <= 1:
             raise ValueError("factor certainty must be between 0 and 1")
 
@@ -57,6 +57,7 @@ class RiskResult:
     trend: str
     hysteresis_state: str
     source_status: dict[str, str]
+    provenance: list[dict[str, Any]] = field(default_factory=list)
 
 
 class RiskEngine:
@@ -144,6 +145,19 @@ class RiskEngine:
             name: value.score * float(self.weights["factors"][name]) / active_weight_total
             for name, value in active.items()
         } if active_weight_total else {}
+        provenance = []
+        for name, value in normalized.items():
+            weight = float(self.weights["factors"][name])
+            refs = list(value.sources) + list(value.evidence)
+            event_ids = sorted({str(x.get("event_id", x.get("ref", x.get("id")))) for x in refs if isinstance(x, dict) and (x.get("event_id") or x.get("ref") or x.get("id"))})
+            source_ids = sorted({str(x.get("source_id")) for x in refs if isinstance(x, dict) and x.get("source_id")})
+            timestamps = sorted({str(x.get("timestamp", x.get("occurred_at", x.get("time")))) for x in refs if isinstance(x, dict) and (x.get("timestamp") or x.get("occurred_at") or x.get("time"))})
+            provenance.append({"factor": name, "event_ids": event_ids, "source_ids": source_ids,
+                "utc_timestamps": timestamps, "timestamps": timestamps, "source_status": value.status,
+                "freshness": value.status == "active", "freshness_status": "fresh" if value.status == "active" else value.status,
+                "configured_weight": weight, "normalized_contribution": contributions.get(name, 0.0),
+                "calculation_inputs": {"score": value.score, "active_weight_total": active_weight_total,
+                                       "certainty": value.certainty, "formula": "score * weight / active_weight_total"}})
         base = sum(contributions.values())
 
         source_values = sources if sources is not None else self._factor_sources(active)
@@ -211,6 +225,7 @@ class RiskEngine:
             trend=trend,
             hysteresis_state=hysteresis_state,
             source_status=source_status,
+            provenance=provenance,
         )
 
     def what_if(

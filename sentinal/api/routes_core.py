@@ -3,10 +3,10 @@ from sentinal.core.config_loader import load_config
 from sentinal.reports.geojson_export import export_geojson
 from sentinal.reports.csv_export import export_csv
 from sentinal.reports.pdf_report import generate_pdf
-from sentinal.explain import build_card
-from sentinal.risk import FactorInput
 from .errors import ApiError
 from .security import require_role
+from sentinal.ingestion import OpenMeteoAdapter
+import os
 router=APIRouter()
 def store(r): return r.app.state.store
 @router.get('/health')
@@ -15,6 +15,12 @@ def health(request: Request): return {'status':'ok','version':'1.0','events':len
 def ready(request: Request):
     runtime = store(request)
     return {'status': 'ready', 'persistence': str(runtime.persistence.path), 'events': len(runtime.events)}
+@router.get('/status')
+def status(request: Request):
+    return store(request).ingestion_status()
+@router.get('/diagnostics')
+def diagnostics(request: Request):
+    return {'ingestion': store(request).ingestion_status(), 'metrics': dict(store(request).metrics)}
 @router.get('/metrics')
 def metrics(request: Request):
     return {'metrics': dict(store(request).metrics)}
@@ -35,13 +41,15 @@ async def _ingest(request: Request, event_type: str | None = None):
             store(request).metrics['validation_errors'] += 1
             errors.append({'error':'invalid canonical event','details':str(exc)})
             continue
-        accepted_now, duplicate = store(request).append_events([event.model_dump(mode='json')])
-        accepted += accepted_now
-        if duplicate:
+        try:
+            published = await store(request).publish_event(event.model_dump(mode="json"))
+        except Exception as exc:
+            raise ApiError("EVENT_PROCESSING_FAILED", str(exc)) from exc
+        accepted += int(published)
+        if not published:
             errors.append({'error':'duplicate event','id':event.id,'source_id':event.source_id})
-        elif accepted_now:
-            await store(request).broadcast(event.model_dump(mode='json'))
-    return {'accepted':accepted,'rejected':len(errors),'errors':errors,'duplicates':store(request).metrics['duplicates']}
+    store(request).record_ingestion(status='LIVE', source='api', provenance='api://ingest', errors=errors, accepted=accepted)
+    return {'accepted':accepted,'rejected':len(errors),'errors':errors,'duplicates':store(request).metrics['duplicates'], 'status': store(request).ingestion_status()}
 @router.post('/ingest')
 async def ingest(request: Request):
     return await _ingest(request)
@@ -51,55 +59,18 @@ async def ingest_typed(event_type: str, request: Request):
         raise ApiError('INVALID_EVENT_TYPE', 'unsupported event type', {'type': event_type})
     return await _ingest(request, event_type)
 @router.post('/scenarios/run')
-def run(request: Request, payload: dict):
+async def run(request: Request, payload: dict):
     try: result=store(request).synthetic.generate(payload.get('scenario','flood'), payload.get('count'), payload.get('seed',0), payload.get('plant_anomalies'))
     except Exception as e: raise ApiError('SCENARIO_INVALID',str(e))
-    store(request).append_events([e.model_dump(mode='json') for e in result.events])
-    scenario_assets = {
-        'flood': 'asset_port_01',
-        'wildfire': 'asset_hospital_01',
-        'satellite_fault': 'asset_ground_01',
-        'cyber_attack': 'asset_grid_01',
-    }
-    primary_factors = {
-        'flood': 'environment',
-        'wildfire': 'environment',
-        'satellite_fault': 'satellite',
-        'cyber_attack': 'cyber',
-    }
-    asset_id = scenario_assets[result.scenario]
-    factors = {name: FactorInput(0, status='unknown') for name in ('satellite', 'telemetry', 'cyber', 'environment')}
-    primary = primary_factors[result.scenario]
-    factors[primary] = FactorInput(75, sources=[{'source_id': result.scenario, 'score': 75}], evidence=[{'type': 'scenario', 'ref': result.scenario}])
-    risk = store(request).risk.evaluate(asset_id, factors)
-    card = build_card(risk)
-    alert_id = f"scenario-{len(store(request).alerts) + 1}"
-    alert = {
-        'id': alert_id,
-        'incident_id': alert_id,
-        'asset_id': asset_id,
-        'status': 'New',
-        'level': risk.level,
-        'risk_score': risk.score,
-        'explanation': {
-            'what': card.what,
-            'why': list(card.why),
-            'confidence': card.confidence,
-            'factors': dict(card.factors),
-            'evidence': list(card.evidence),
-            'next_steps': list(card.next_steps),
-            'data_gaps': list(card.data_gaps),
-            'weights_version': card.weights_version,
-        },
-    }
-    store(request).alerts.append(alert)
-    store(request).save_alert(alert)
+    for event in result.events:
+        await store(request).publish_event(event.model_dump(mode="json"))
+    store(request).record_ingestion(status='DEMO', source='synthetic-generator', provenance=f'synthetic://{result.scenario}', accepted=len(result.events))
     return result.model_dump(mode='json')
 @router.post('/scenarios/{name}/run')
-def run_named(name: str, request: Request, payload: dict | None = None):
+async def run_named(name: str, request: Request, payload: dict | None = None):
     values = dict(payload or {})
     values['scenario'] = name
-    return run(request, values)
+    return await run(request, values)
 @router.post('/upload')
 async def upload(request: Request, file: UploadFile=File(...), _: str = Depends(require_role('admin', 'operator'))):
     data=await file.read(store(request).config['limits']['upload_bytes']+1)
@@ -123,9 +94,56 @@ async def upload(request: Request, file: UploadFile=File(...), _: str = Depends(
                 canonical.append(Event.model_validate(item).model_dump(mode='json'))
             except Exception as exc:
                 raise ApiError("INVALID_UPLOAD", "upload contains an invalid canonical event", str(exc)) from exc
-        store(request).append_events(canonical)
-        imported = len(items)
-    return {'status':'accepted','filename':file.filename,'bytes':len(data),'imported_events':imported}
+        upload_errors = []
+        for event in canonical:
+            if await store(request).publish_event(event):
+                imported += 1
+            else:
+                upload_errors.append({'error': 'duplicate event', 'id': event['id'], 'source_id': event['source_id']})
+        store(request).record_ingestion(status='FILE-BASED', source='upload', provenance=f'upload://{file.filename}', errors=upload_errors, accepted=imported)
+        return {'status': 'partial' if upload_errors else 'accepted', 'filename': file.filename, 'bytes': len(data), 'accepted': imported,
+                'rejected': len(upload_errors), 'imported_events': imported, 'errors': upload_errors,
+                'provenance': f'upload://{file.filename}', 'diagnostics': store(request).ingestion_status()}
+    elif file.filename and file.filename.lower().endswith((".csv", ".jsonl", ".ndjson")):
+        import tempfile
+        from pathlib import Path
+        from sentinal.ingestion.adapters import CSVAdapter, JSONLAdapter
+        suffix = Path(file.filename).suffix.lower()
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
+            temp.write(data); temp_path = temp.name
+        try:
+            result = (CSVAdapter('upload').read(temp_path) if suffix == '.csv' else JSONLAdapter('upload').read(temp_path))
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+        for event in result.events:
+            await store(request).publish_event(event.model_dump(mode='json'))
+        imported = len(result.events)
+        errors = [error.__dict__ for error in result.errors]
+        store(request).record_ingestion(status='FILE-BASED', source=result.source_id, provenance=result.provenance, errors=errors, accepted=imported)
+        return {'status': 'partial' if errors else 'accepted', 'filename': file.filename, 'bytes': len(data), 'accepted': imported,
+                'rejected': len(errors), 'imported_events': imported, 'errors': errors, 'provenance': result.provenance,
+                'diagnostics': store(request).ingestion_status()}
+    elif file.filename:
+        raise ApiError('UNSUPPORTED_FORMAT', 'supported uploads are .json, .csv, .jsonl, and .ndjson', {'filename': file.filename}, 415)
+    else:
+        raise ApiError('INVALID_UPLOAD', 'filename is required')
+    store(request).record_ingestion(status='FILE-BASED', source='upload', provenance=f'upload://{file.filename}', accepted=imported)
+    return {'status':'accepted','filename':file.filename,'bytes':len(data),'imported_events':imported,'accepted': imported,'rejected': 0,'errors': [], 'provenance': f'upload://{file.filename}', 'diagnostics': store(request).ingestion_status()}
+
+@router.post('/sources/open-meteo')
+async def open_meteo(request: Request, payload: dict, _: str = Depends(require_role('admin', 'operator'))):
+    try:
+        latitude = float(payload['latitude'])
+        longitude = float(payload['longitude'])
+        forecast_hours = int(payload.get('forecast_hours', 1))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ApiError('INVALID_SOURCE_REQUEST', 'latitude and longitude are required numeric values', status_code=422) from exc
+    adapter = OpenMeteoAdapter(endpoint=os.getenv('SENTINAL_OPEN_METEO_URL') or None)
+    result = adapter.fetch_location(latitude, longitude, forecast_hours=forecast_hours)
+    for event in result.events:
+        await store(request).publish_event(event.model_dump(mode='json'))
+    store(request).record_ingestion(status=result.status, source=result.source_id, provenance=result.provenance, errors=[error.__dict__ for error in result.errors], accepted=len(result.events))
+    return {'accepted': len(result.events), 'rejected': len(result.errors), 'errors': [error.__dict__ for error in result.errors], 'status': store(request).ingestion_status()}
 @router.get('/config')
 def get_config(request: Request): return store(request).config
 @router.put('/config')

@@ -1,0 +1,3 @@
+# Optional real GeoTIFF processing. Install this in an environment with a
+# compatible Rasterio/GDAL wheel before using before_raster/after_raster.
+rasterio>=1.3,<2

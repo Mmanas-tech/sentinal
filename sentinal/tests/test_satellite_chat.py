@@ -59,6 +59,7 @@ def test_chat_uses_only_analysis_values_and_handles_scope() -> None:
     unavailable = route("What changed?", {"status": "refused", "message": "AOI unavailable"})
 
     assert answer["intent"] == "how_much"
+    assert answer["answer"] == "25.0% mean change was measured across the analyzed area."
     assert answer["evidence"]["percent_change"] == 25.0
     assert unsupported["intent"] == "unsupported"
     assert "secrets" not in unsupported["answer"]

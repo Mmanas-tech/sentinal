@@ -27,6 +27,43 @@ def test_csv_geojson_and_pdf_exports(tmp_path) -> None:
         assert b"SENTINAL Risk Report" in pdf
 
 
+@pytest.mark.parametrize(
+    "factors",
+    [
+        {"environment": 75.0},
+        {
+            "satellite": 25.0,
+            "telemetry": 25.0,
+            "cyber": 25.0,
+            "environment": 25.0,
+        },
+    ],
+)
+def test_pdf_export_handles_alert_factor_tables(factors) -> None:
+    alert = {
+        "id": "scenario-test",
+        "incident_id": "scenario-test",
+        "asset_id": "asset_port_01",
+        "status": "New",
+        "level": "high",
+        "risk_score": 63.75,
+        "explanation": {
+            "what": "High risk for asset asset_port_01 (score 63.8)",
+            "why": ["environment score contributed to the risk"],
+            "confidence": 0.8,
+            "factors": factors,
+            "evidence": [{"type": "scenario", "ref": "flood"}],
+            "next_steps": ["Review the linked evidence"],
+            "data_gaps": [],
+            "weights_version": "1.0",
+        },
+    }
+
+    pdf = generate_pdf([alert])
+
+    assert pdf.startswith(b"%PDF")
+
+
 def test_audit_is_append_only_and_safe(tmp_path) -> None:
     path = tmp_path / "audit.jsonl"
     append_audit(path, {"action": "view", "target": "alert-1"})

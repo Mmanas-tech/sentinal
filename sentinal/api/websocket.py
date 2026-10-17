@@ -17,8 +17,9 @@ async def stream(ws: WebSocket):
                 await ws.close(code=1008, reason="since cursor out of range")
                 return
             events = events[cursor:]
+        await ws.send_json({"type": "status", "data": store.ingestion_status()})
         for index, event in enumerate(events):
-            await ws.send_json({"type": "event", "cursor": index, "data": event})
+            await ws.send_json({"type": "event", "cursor": index, "data": event, "status": store.ingestion_status()})
         while True:
             message = await ws.receive_json()
             if message.get("type") == "backfill":
@@ -33,7 +34,7 @@ async def stream(ws: WebSocket):
                     )
                     continue
                 for index, event in enumerate(list(store.events)[-limit:]):
-                    await ws.send_json({"type": "event", "cursor": index, "data": event})
+                    await ws.send_json({"type": "event", "cursor": index, "data": event, "status": store.ingestion_status()})
             else:
                 await ws.send_json(
                     {
